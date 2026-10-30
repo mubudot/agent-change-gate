@@ -8,5 +8,6 @@ export function approvalDetails(request) {
     targets: request.op.targets,
     payload: request.op.payload,
     fingerprint: request.fingerprint,
+    ...(request.context ? { context: request.context } : {}),
   }, null, 2);
 }

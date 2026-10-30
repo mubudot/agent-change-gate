@@ -11,12 +11,14 @@ modules:
   rovo:agent:
     - key: change-gate-agent
       name: Change Gate Agent
-      description: Makes Jira changes for you, but only through a deterministic policy
-        gate with caps, allowlists and human approval for risky or bulk changes.
+      description: Makes Jira changes for you through a deterministic gate that checks what
+        each issue is connected to (releases, blockers, goals, pull requests, deployments via
+        Teamwork Graph) before it lets an agent write, and asks a human when it matters.
       prompt: resource:agent-prompt;agent-prompt.txt
       conversationStarters:
         - Comment on the issue I'm looking at
         - Move these issues to In Review
+        - What could go wrong if you move this issue?
         - What is the agent change policy here?
         - Is my approval request approved yet?
       actions:
@@ -30,6 +32,7 @@ modules:
         - acg-approval-status
         - acg-my-activity
         - acg-policy-summary
+        - acg-issue-context
       skills:
         - agent-change-gate
 
@@ -49,6 +52,7 @@ modules:
           - acg-approval-status
           - acg-my-activity
           - acg-policy-summary
+          - acg-issue-context
 
   rovo:mcp:
     - key: change-gate-mcp
@@ -64,6 +68,7 @@ modules:
         - acg-approval-status
         - acg-my-activity
         - acg-policy-summary
+        - acg-issue-context
 
   action:
     - key: acg-comment-issues
@@ -277,6 +282,21 @@ modules:
           required: false
           description: "Unused."
 
+    - key: acg-issue-context
+      name: Check issue context
+      function: fn-issue-context
+      actionVerb: GET
+      description: Read-only. Show what the change gate knows about issues before any change -
+        release due soon, open issues they block, priority, and Teamwork Graph links to goals,
+        pull requests and production deployments - and whether each one needs a human.
+      inputs:
+        issueKeys:
+          title: "Issue keys"
+          type: string
+          required: false
+          description: "Comma-separated issue keys. Omit to use the issue the user is
+            viewing."
+
   jira:globalPage:
     - key: change-gate-page
       title: Agent Change Gate
@@ -306,6 +326,8 @@ modules:
       handler: index.myActivity
     - key: fn-policy-summary
       handler: index.policySummary
+    - key: fn-issue-context
+      handler: index.issueContext
     - key: fn-ui
       handler: index.uiResolver
 
@@ -320,3 +342,9 @@ permissions:
     - read:jira-work
     - write:jira-work
     - storage:app
+    # Teamwork Graph API (Preview): read-only, per object type. Results are permission-filtered
+    # for the user; an admin can switch any of these off and the gate falls back to Jira context.
+    - read:graph:issue:jira
+    - read:graph:goal:atlassian
+    - read:graph:pull-request:external
+    - read:graph:deployment:external

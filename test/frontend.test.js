@@ -94,3 +94,20 @@ test('NEEDS APPROVAL banner is replaced once the simulated request is decided', 
   const ran = simulationMessage({ status: 'EXECUTED', approvalId: 'a1', approvedBy: 'u2', dryRun: true });
   assert.equal(currentSimulationMessage(ran, [{ id: 'a1', status: 'EXECUTED' }]), ran);
 });
+
+import { contextRulesSummary, graphStatusLabel, isContextReason, signalLabel, sourceAppearance, sourceNames } from '../src/frontend/format.js';
+import { normalizePolicy } from '../src/policy/policy.js';
+
+test('context display helpers', () => {
+  const { policy } = normalizePolicy({ contextRisk: { signals: { HIGH_PRIORITY: 'off', LINKED_GOAL: 'deny' } } });
+  assert.deepEqual(sourceNames('teamwork-graph+jira'), ['Teamwork Graph', 'Jira']);
+  assert.equal(sourceAppearance('teamwork-graph'), 'new');
+  assert.equal(sourceAppearance('jira'), 'inprogress');
+  assert.equal(signalLabel('RELEASE_SOON'), 'Release due soon');
+  assert.ok(contextRulesSummary(policy).includes('Linked to a goal (block)'));
+  assert.ok(!contextRulesSummary(policy).includes('High priority'));
+  assert.equal(isContextReason({ code: 'CONTEXT_LINKED_GOAL' }), true);
+  assert.equal(graphStatusLabel(policy, { ok: true }).text, 'Teamwork Graph connected');
+  assert.match(graphStatusLabel(policy, { ok: false, error: 'HTTP 401' }).detail, /HTTP 401/);
+  assert.equal(graphStatusLabel(normalizePolicy({ contextRisk: { enabled: false } }).policy).text, 'Context checks off');
+});

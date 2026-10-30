@@ -138,3 +138,42 @@ export function capsSummary(policy) {
     `${policy.siteDailyLimit}/day per site`,
   ].join(' · ');
 }
+
+// ---- context risk (Jira + Teamwork Graph) ----
+
+const SOURCE_NAMES = { jira: 'Jira', 'teamwork-graph': 'Teamwork Graph', simulated: 'Simulated' };
+// Teamwork Graph uses the purple "new" lozenge so graph-derived context stands out from Jira facts.
+const SOURCE_APPEARANCE = { jira: 'inprogress', 'teamwork-graph': 'new', simulated: 'default' };
+
+/** "teamwork-graph+jira" -> ["Teamwork Graph", "Jira"] */
+export const sourceNames = (source) => String(source ?? '').split('+').filter(Boolean).map((s) => SOURCE_NAMES[s] ?? s);
+export const sourceAppearance = (source) => SOURCE_APPEARANCE[String(source ?? '').split('+')[0]] ?? 'default';
+
+const SIGNAL_LABELS = {
+  RELEASE_SOON: 'Release due soon',
+  BLOCKS_OPEN_WORK: 'Blocks open work',
+  HIGH_PRIORITY: 'High priority',
+  LINKED_GOAL: 'Linked to a goal',
+  OPEN_PULL_REQUEST: 'Open pull request',
+  PRODUCTION_DEPLOYMENT: 'In a production deployment',
+};
+export const signalLabel = (signal) => SIGNAL_LABELS[signal] ?? signal;
+
+/** Signals the policy acts on, e.g. ["Release due soon (approve)", ...]. */
+export function contextRulesSummary(policy) {
+  const cfg = policy?.contextRisk;
+  if (!cfg?.enabled) return [];
+  return Object.entries(cfg.signals ?? {})
+    .filter(([, mode]) => mode !== 'off')
+    .map(([sig, mode]) => `${signalLabel(sig)}${mode === 'deny' ? ' (block)' : ''}`);
+}
+
+export const isContextReason = (reason) => String(reason?.code ?? '').startsWith('CONTEXT_');
+
+/** Header tile text for the Teamwork Graph connection. */
+export function graphStatusLabel(policy, status) {
+  if (!policy?.contextRisk?.enabled) return { text: 'Context checks off', appearance: 'default' };
+  if (!policy.contextRisk.useTeamworkGraph) return { text: 'Jira context only', appearance: 'inprogress' };
+  if (status?.ok) return { text: 'Teamwork Graph connected', appearance: 'new' };
+  return { text: 'Jira context only', appearance: 'moved', detail: status?.error ? `Teamwork Graph unavailable: ${status.error}` : 'Teamwork Graph unavailable' };
+}

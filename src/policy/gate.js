@@ -14,7 +14,8 @@ export const Verdict = Object.freeze({
  *   project Jira reports for the issue (resolved by the service), not a guess.
  *   For transitions, op.toStatus is the resolved target status name.
  * @param {{actorHour?:number, actorDay?:number, siteDay?:number}} usage writes already counted
- * @param {{policyErrors?: string[]}} [opts]
+ * @param {{policyErrors?: string[], context?: {signals: object[], gaps: object[]}}} [opts]
+ *   context comes from src/context/collector.js; it can only add DENY or NEEDS_APPROVAL reasons.
  * @returns {{verdict: string, reasons: {code:string, message:string}[], units: number}}
  */
 export function evaluate(policy, op, usage = {}, opts = {}) {
@@ -53,7 +54,11 @@ export function evaluate(policy, op, usage = {}, opts = {}) {
     if (len > policy.maxCommentLength) d('COMMENT_TOO_LONG', `comment is ${len} characters (max ${policy.maxCommentLength})`);
   }
 
+  const contextReasons = contextRiskReasons(policy, opts.context);
+  deny.push(...contextReasons.deny);
+
   if (deny.length) return { verdict: Verdict.DENY, reasons: deny, units };
+  approve.push(...contextReasons.approve);
 
   // ---- approval reasons (a human can say yes) ----
   if (mode === 'approve' || DESTRUCTIVE_KINDS.includes(op.kind)) {
@@ -83,4 +88,37 @@ export function evaluate(policy, op, usage = {}, opts = {}) {
 
   if (approve.length) return { verdict: Verdict.NEEDS_APPROVAL, reasons: approve, units };
   return { verdict: Verdict.ALLOW, reasons: [], units };
+}
+
+/**
+ * One reason per signal type (codes stay unique so a run-time recheck can compare them),
+ * listing every affected issue. Missing Jira facts always need a human; a Teamwork Graph
+ * outage does only when policy.contextRisk.onGraphUnavailable is 'approve'.
+ */
+export function contextRiskReasons(policy, context) {
+  const out = { deny: [], approve: [] };
+  const cfg = policy.contextRisk;
+  if (!context || !cfg?.enabled) return out;
+  const grouped = new Map();
+  for (const s of context.signals ?? []) {
+    const mode = cfg.signals?.[s.signal] ?? 'off';
+    if (mode === 'off') continue;
+    const g = grouped.get(s.code) ?? { mode, code: s.code, messages: [], sources: new Set() };
+    g.messages.push(s.message);
+    g.sources.add(s.source);
+    grouped.set(s.code, g);
+  }
+  for (const g of grouped.values()) {
+    const reason = { code: g.code, message: g.messages.join('; '), source: [...g.sources].join('+') };
+    (g.mode === 'deny' ? out.deny : out.approve).push(reason);
+  }
+  const gaps = (context.gaps ?? []).filter((g) => g.required || cfg.onGraphUnavailable === 'approve');
+  if (gaps.length) {
+    out.approve.push({
+      code: 'CONTEXT_UNAVAILABLE',
+      message: `context could not be fully checked (${gaps[0].message}${gaps.length > 1 ? `; +${gaps.length - 1} more` : ''})`,
+      source: [...new Set(gaps.map((g) => g.source))].join('+'),
+    });
+  }
+  return out;
 }

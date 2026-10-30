@@ -24,7 +24,8 @@ export class JiraClient {
   }
 
   async getIssue(key) {
-    const r = await this.request('GET', `/rest/api/3/issue/${issueRef(key)}?fields=project,status,summary`);
+    // fixVersions/priority/issuelinks feed context risk (src/context/signals.js) in the same read.
+    const r = await this.request('GET', `/rest/api/3/issue/${issueRef(key)}?fields=project,status,summary,fixVersions,priority,issuelinks`);
     if (r.status === 404) return null;
     ensureOk(r, `read ${key}`);
     return {
@@ -34,6 +35,7 @@ export class JiraClient {
       projectKey: r.data.fields?.project?.key,
       status: r.data.fields?.status?.name,
       summary: r.data.fields?.summary,
+      facts: issueFacts(r.data.fields),
     };
   }
 
@@ -89,6 +91,25 @@ export class JiraClient {
   async remove(key) {
     return this.request('DELETE', `/rest/api/3/issue/${issueRef(key)}`);
   }
+}
+
+/** Context facts from an issue's fields. Absent fields simply yield no facts. */
+export function issueFacts(fields = {}) {
+  const versions = Array.isArray(fields?.fixVersions) ? fields.fixVersions : [];
+  const links = Array.isArray(fields?.issuelinks) ? fields.issuelinks : [];
+  return {
+    fixVersions: versions.slice(0, 50).map((v) => ({
+      name: String(v?.name ?? '').slice(0, 200),
+      released: v?.released === true,
+      releaseDate: typeof v?.releaseDate === 'string' ? v.releaseDate : null,
+    })),
+    priority: typeof fields?.priority?.name === 'string' ? fields.priority.name : null,
+    // Outward "blocks" links only: this issue blocks those issues.
+    blocks: links
+      .filter((l) => String(l?.type?.outward ?? '').toLowerCase() === 'blocks' && l?.outwardIssue?.key)
+      .slice(0, 50)
+      .map((l) => ({ key: String(l.outwardIssue.key), done: l.outwardIssue.fields?.status?.statusCategory?.key === 'done' })),
+  };
 }
 
 function ensureOk(r, what) {

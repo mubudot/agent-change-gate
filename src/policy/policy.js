@@ -44,7 +44,31 @@ export const DEFAULT_POLICY = Object.freeze({
   approvers: [], // Atlassian accountIds. Empty = Jira administrators.
   approvalTtlMinutes: 24 * 60,
   timezone: 'UTC', // day boundary for daily limits
+  // Context risk: what the target issues are connected to can only RAISE the verdict.
+  contextRisk: {
+    enabled: true,
+    // Comments and creates are excluded by default: context matters for state changes.
+    appliesTo: ['jira.issue.transition', 'jira.issue.edit', 'jira.issue.assign', 'jira.issue.delete'],
+    useTeamworkGraph: true,
+    releaseWindowDays: 7, // unreleased fixVersion due within this many days (or overdue)
+    highPriorities: ['Highest'],
+    // off | approve | deny, per signal (see src/context/signals.js)
+    signals: {
+      RELEASE_SOON: 'approve',
+      BLOCKS_OPEN_WORK: 'approve',
+      HIGH_PRIORITY: 'approve',
+      LINKED_GOAL: 'approve',
+      OPEN_PULL_REQUEST: 'approve',
+      PRODUCTION_DEPLOYMENT: 'approve',
+    },
+    // Teamwork Graph is a Preview API: if it errors, 'ignore' keeps Jira-based context only,
+    // 'approve' sends the change to a human. Missing Jira facts always need a human.
+    onGraphUnavailable: 'ignore',
+  },
 });
+
+export const SIGNAL_MODES = Object.freeze(['off', 'approve', 'deny']);
+const CONTEXT_KINDS = Object.freeze(['jira.issue.transition', 'jira.issue.edit', 'jira.issue.assign', 'jira.issue.delete', 'jira.issue.comment']);
 
 const PROJECT_KEY = /^[A-Z][A-Z0-9_]{0,9}$/;
 const ACCOUNT_ID = /^[A-Za-z0-9:_-]{1,128}$/;
@@ -178,6 +202,8 @@ export function normalizePolicy(input = {}) {
     } else p.timezone = input.timezone;
   }
 
+  if (input.contextRisk !== undefined) p.contextRisk = normalizeContextRisk(input.contextRisk, errors);
+
   if (p.bulkApprovalThreshold > p.maxTargetsPerCall) {
     errors.push('bulkApprovalThreshold must be <= maxTargetsPerCall');
   }
@@ -185,6 +211,51 @@ export function normalizePolicy(input = {}) {
     errors.push('perActorHourlyLimit must be <= perActorDailyLimit');
   }
   return { policy: p, errors };
+}
+
+function normalizeContextRisk(input, errors) {
+  const c = clone(DEFAULT_POLICY.contextRisk);
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+    errors.push('contextRisk must be an object');
+    return c;
+  }
+  for (const key of Object.keys(input)) {
+    if (!Object.hasOwn(c, key)) errors.push(`unknown contextRisk property '${key}'`);
+  }
+  for (const key of ['enabled', 'useTeamworkGraph']) {
+    if (input[key] !== undefined) {
+      if (typeof input[key] !== 'boolean') errors.push(`contextRisk.${key} must be a boolean`);
+      else c[key] = input[key];
+    }
+  }
+  const kinds = stringList(input.appliesTo, 'contextRisk.appliesTo', errors);
+  if (kinds) {
+    for (const k of kinds) if (!CONTEXT_KINDS.includes(k)) errors.push(`contextRisk.appliesTo: unsupported operation '${k}'`);
+    c.appliesTo = kinds.filter((k) => CONTEXT_KINDS.includes(k));
+  }
+  if (input.releaseWindowDays !== undefined) {
+    const n = input.releaseWindowDays;
+    if (!Number.isInteger(n) || n < 0 || n > 365) errors.push('contextRisk.releaseWindowDays must be an integer between 0 and 365');
+    else c.releaseWindowDays = n;
+  }
+  const prios = stringList(input.highPriorities, 'contextRisk.highPriorities', errors);
+  if (prios) c.highPriorities = prios;
+  if (input.signals !== undefined) {
+    if (input.signals === null || typeof input.signals !== 'object' || Array.isArray(input.signals)) {
+      errors.push('contextRisk.signals must be an object');
+    } else {
+      for (const [sig, mode] of Object.entries(input.signals)) {
+        if (!Object.hasOwn(c.signals, sig)) errors.push(`contextRisk.signals: unknown signal '${sig}'`);
+        else if (!SIGNAL_MODES.includes(mode)) errors.push(`contextRisk.signals.${sig} must be one of ${SIGNAL_MODES.join(', ')}`);
+        else c.signals[sig] = mode;
+      }
+    }
+  }
+  if (input.onGraphUnavailable !== undefined) {
+    if (!['ignore', 'approve'].includes(input.onGraphUnavailable)) errors.push("contextRisk.onGraphUnavailable must be 'ignore' or 'approve'");
+    else c.onGraphUnavailable = input.onGraphUnavailable;
+  }
+  return c;
 }
 
 export function clone(v) {

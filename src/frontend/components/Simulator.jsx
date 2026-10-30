@@ -6,10 +6,16 @@ import { invoke } from '@forge/bridge';
 import { changeSummary, currentSimulationMessage, operationLabel, relativeTime, simulationMessage, targetList } from '../format.js';
 import { Card, Feedback, StatusLozenge } from './ui.jsx';
 
-const PRESETS = [
+const RULE_PRESETS = [
   { id: 'allow-comment', label: 'Low-risk comment', expect: 'Expected: allowed' },
   { id: 'approval-transition', label: 'Move to protected status', expect: 'Expected: needs approval' },
   { id: 'blocked-bulk', label: 'Runaway bulk close', expect: 'Expected: blocked' },
+];
+
+// The pair that shows context-aware gating: identical command, different issue context.
+const CONTEXT_PRESETS = [
+  { id: 'routine-move', label: 'Move to In Review', expect: 'Issue with no links: allowed' },
+  { id: 'context-move', label: 'Same move, issue ships this week', expect: 'Release in 3 days + goal: needs approval' },
 ];
 
 const HEAD = {
@@ -21,6 +27,25 @@ const HEAD = {
     { key: 'action', content: '' },
   ],
 };
+
+function PresetRow({ title, hint, presets, busy, onRun }) {
+  return (
+    <Stack space="space.075">
+      <Inline space="space.100" alignBlock="center">
+        <Text weight="medium">{title}</Text>
+        {hint && <Text size="small" color="color.text.subtlest">{hint}</Text>}
+      </Inline>
+      <Inline space="space.100" shouldWrap>
+        {presets.map((p) => (
+          <Stack key={p.id} space="space.050">
+            <Button isDisabled={busy} onClick={() => onRun(p.id)}>{p.label}</Button>
+            <Text size="small" color="color.text.subtlest">{p.expect}</Text>
+          </Stack>
+        ))}
+      </Inline>
+    </Stack>
+  );
+}
 
 export function Simulator({ data, reload }) {
   const [issueKey, setIssueKey] = useState('');
@@ -87,14 +112,14 @@ export function Simulator({ data, reload }) {
             {key ? `Live: an allowed or approved change really writes to ${key.toUpperCase()}.` : 'Dry run: no issue key, so Jira is never changed.'}
           </Text>
         </Inline>
-        <Inline space="space.100" shouldWrap>
-          {PRESETS.map((p) => (
-            <Stack key={p.id} space="space.050">
-              <Button isDisabled={busy} onClick={() => call('simulate', { preset: p.id, ...(key ? { issueKey: key } : {}) })}>{p.label}</Button>
-              <Text size="small" color="color.text.subtlest">{p.expect}</Text>
-            </Stack>
-          ))}
-        </Inline>
+        <PresetRow title="Policy rules" presets={RULE_PRESETS} busy={busy} onRun={(id) => call('simulate', { preset: id, ...(key ? { issueKey: key } : {}) })} />
+        <PresetRow
+          title="Same command, different context"
+          hint={key ? `Live: the gate reads ${key.toUpperCase()}'s real Jira and Teamwork Graph context.` : 'Dry run: the second issue gets a synthetic release and goal.'}
+          presets={CONTEXT_PRESETS}
+          busy={busy}
+          onRun={(id) => call('simulate', { preset: id, ...(key ? { issueKey: key } : {}) })}
+        />
         {twoPerson && (
           <SectionMessage appearance="information">
             <Text>

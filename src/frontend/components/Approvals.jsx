@@ -24,6 +24,7 @@ import { approvalDetails } from '../approval-details.js';
 import { changeSummary, formatTime, operationLabel, relativeTime, sourceLabel, targetList } from '../format.js';
 import { EmptyNotice, Feedback, Section, StatusLozenge, resultMessage } from './ui.jsx';
 import { Simulator } from './Simulator.jsx';
+import { ContextSignals, SourceLozenge } from './ContextSignals.jsx';
 
 const HEAD = {
   cells: [
@@ -84,6 +85,12 @@ function ReviewModal({ request, data, onClose, onDecided }) {
           <SectionMessage appearance="warning" title="Why this needs a human">
             <Text>{request.reasons.map((x) => x.message).join(' · ') || 'Policy requires approval.'}</Text>
           </SectionMessage>
+          {request.context && (
+            <Stack space="space.100">
+              <Text><Strong>What this work is connected to</Strong>{` (checked ${relativeTime(request.context.checkedAt)})`}</Text>
+              <ContextSignals context={request.context} />
+            </Stack>
+          )}
           <Text><Strong>Exact change the agent will make</Strong> (untruncated)</Text>
           <CodeBlock language="json" text={approvalDetails(request)} showLineNumbers={false} shouldWrapLongLines />
           {ownRequest && (
@@ -109,6 +116,20 @@ function ReviewModal({ request, data, onClose, onDecided }) {
   );
 }
 
+/** Reasons, with context-derived ones tagged by where the gate learned them. */
+function WhyCell({ reasons }) {
+  return (
+    <Stack space="space.050">
+      {reasons.map((x, i) => (
+        <Inline key={`${x.code}-${i}`} space="space.050" alignBlock="center" shouldWrap>
+          {x.source && <SourceLozenge source={x.source} />}
+          <Text size="small">{x.message}</Text>
+        </Inline>
+      ))}
+    </Stack>
+  );
+}
+
 export function Approvals({ data, loading, reload }) {
   const [reviewing, setReviewing] = useState(null);
   const [message, setMessage] = useState(null);
@@ -130,7 +151,7 @@ export function Approvals({ data, loading, reload }) {
         ),
       },
       { key: 'issues', content: <Text>{targetList(r.op.targets)}</Text> },
-      { key: 'why', content: <Text size="small">{r.reasons.map((x) => x.message).join(' · ')}</Text> },
+      { key: 'why', content: <WhyCell reasons={r.reasons} /> },
       { key: 'status', content: <StatusLozenge status={r.status} /> },
       {
         key: 'action',

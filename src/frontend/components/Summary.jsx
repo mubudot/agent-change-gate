@@ -2,6 +2,7 @@
 import React from 'react';
 import { Badge, Inline, Lozenge, Stack, Text } from '@forge/react';
 import { Card } from './ui.jsx';
+import { graphStatusLabel } from '../format.js';
 
 function Stat({ label, children }) {
   return (
@@ -11,6 +12,16 @@ function Stat({ label, children }) {
         {children}
       </Stack>
     </Card>
+  );
+}
+
+function GraphStatus({ policy, status }) {
+  const s = graphStatusLabel(policy, status);
+  return (
+    <Stack space="space.050">
+      <Lozenge appearance={s.appearance} isBold={s.appearance === 'new'}>{s.text}</Lozenge>
+      {s.detail && <Text size="small" color="color.text.subtlest">{s.detail}</Text>}
+    </Stack>
   );
 }
 
@@ -31,6 +42,9 @@ export function Summary({ data, pending }) {
         <Lozenge appearance={policy.agentWritesPaused ? 'removed' : 'success'} isBold>
           {policy.agentWritesPaused ? 'Paused' : 'Active'}
         </Lozenge>
+      </Stat>
+      <Stat label="Context source">
+        <GraphStatus policy={policy} status={data.graphStatus} />
       </Stat>
       <Stat label="Your role">
         <Lozenge appearance={data.isAdmin || data.isApprover ? 'inprogress' : 'default'}>

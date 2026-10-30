@@ -3,6 +3,7 @@
 // source 'simulated' and, without a real issue key, bound to the dry-run Jira client.
 import { buildPreset } from './presets.js';
 import { DryRunJira } from './dry-run-jira.js';
+import { DryRunGraph } from './dry-run-graph.js';
 
 const refuse = () => ({ status: 'REFUSED', code: 'NOT_ADMIN', message: 'only Jira administrators can simulate agent requests' });
 
@@ -11,13 +12,18 @@ export function jiraForSimulation(simulation, realJira) {
   return simulation?.mode === 'dry-run' ? new DryRunJira(simulation) : realJira;
 }
 
+/** Teamwork Graph client a simulated request must use; dry runs never query the real graph. */
+export function graphForSimulation(simulation, realGraph) {
+  return simulation?.mode === 'dry-run' ? new DryRunGraph(simulation) : realGraph;
+}
+
 export async function simulateRequest(service, presetId, issueKey, actor) {
   if (!actor) return { status: 'INVALID', errors: ['no user context'] };
   if (!(await service.jira.isJiraAdmin())) return refuse();
   const { policy } = await service.repo.loadPolicy();
-  const { plan, error } = buildPreset(String(presetId ?? ''), policy, issueKey);
+  const { plan, error } = buildPreset(String(presetId ?? ''), policy, issueKey, service.now());
   if (!plan) return { status: 'INVALID', errors: [error] };
-  const target = plan.simulation.mode === 'dry-run' ? service.withJira(jiraForSimulation(plan.simulation)) : service;
+  const target = plan.simulation.mode === 'dry-run' ? service.withJira(jiraForSimulation(plan.simulation), graphForSimulation(plan.simulation)) : service;
   const origin = { source: 'simulated', simulation: plan.simulation };
   const result = await target.guardedChange(plan.kind, plan.input, actor, { origin });
   return { ...result, source: 'simulated', simulation: plan.simulation };

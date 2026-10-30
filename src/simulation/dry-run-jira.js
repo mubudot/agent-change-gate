@@ -9,11 +9,12 @@ const ok = () => ({ status: 200, data: { dryRun: true } });
 
 export class DryRunJira {
   /** @param {{projectKey: string, extraStatuses?: string[]}} simulation stored with the request */
-  constructor({ projectKey, extraStatuses = [] }) {
+  constructor({ projectKey, extraStatuses = [], context = null }) {
     if (!PROJECT_KEY.test(String(projectKey))) throw new Error('dry run needs a valid project key');
     this.dryRun = true;
     this.projectKey = projectKey;
     // Order is fixed so transition ids are identical when the request is created and when it runs.
+    this.context = context;
     this.statuses = [...new Set([...BASE_STATUSES, ...extraStatuses.filter((s) => typeof s === 'string' && s)])];
   }
 
@@ -22,7 +23,12 @@ export class DryRunJira {
     const s = String(ref);
     const key = /^[1-9][0-9]*$/.test(s) ? `${this.projectKey}-${s}` : s;
     if (!ISSUE_KEY.test(key) || key.split('-')[0] !== this.projectKey) return null;
-    return { id: key.split('-')[1], key, projectId: DRY_PROJECT_ID, projectKey: this.projectKey, status: 'To Do', summary: 'Simulated issue' };
+    return { id: key.split('-')[1], key, projectId: DRY_PROJECT_ID, projectKey: this.projectKey, status: 'To Do', summary: 'Simulated issue', facts: this.facts() };
+  }
+
+  /** Jira-side context facts of the synthetic issue (none unless the preset froze some). */
+  facts() {
+    return { fixVersions: this.context?.fixVersions ?? [], priority: this.context?.priority ?? null, blocks: this.context?.blocks ?? [] };
   }
 
   async getProject(key) {

@@ -5,14 +5,14 @@ import { makeResolver } from '@forge/resolver';
 
 export function resolverDefinitions(getService) {
   return {
-    getDashboard: ({ context }) => getService().dashboard(context.accountId),
+    getDashboard: ({ context }) => getService(context).dashboard(context.accountId),
     decide: ({ payload, context }) =>
-      getService().decideRequest(String(payload?.approvalId ?? ''), payload?.approve === true, payload?.note, context.accountId),
-    savePolicy: ({ payload, context }) => getService().savePolicy(payload?.policy, context.accountId),
+      getService(context).decideRequest(String(payload?.approvalId ?? ''), payload?.approve === true, payload?.note, context.accountId),
+    savePolicy: ({ payload, context }) => getService(context).savePolicy(payload?.policy, context.accountId),
     // Admin-only demo: push a preset request through the same gate the Rovo/MCP actions use.
     simulate: ({ payload, context }) =>
-      getService().simulate(String(payload?.preset ?? ''), typeof payload?.issueKey === 'string' ? payload.issueKey : undefined, context.accountId),
-    runSimulated: ({ payload, context }) => getService().runSimulated(String(payload?.approvalId ?? ''), context.accountId),
+      getService(context).simulate(String(payload?.preset ?? ''), typeof payload?.issueKey === 'string' ? payload.issueKey : undefined, context.accountId),
+    runSimulated: ({ payload, context }) => getService(context).runSimulated(String(payload?.approvalId ?? ''), context.accountId),
   };
 }
 

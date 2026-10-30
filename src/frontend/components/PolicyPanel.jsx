@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, Heading, Inline, Lozenge, SectionMessage, Stack, Tag, TagGroup, Text, TextArea, User, UserGroup } from '@forge/react';
 import { invoke } from '@forge/bridge';
-import { capsSummary } from '../format.js';
+import { capsSummary, contextRulesSummary } from '../format.js';
 import { Card, Feedback, Section, resultMessage } from './ui.jsx';
 
 function Row({ label, children }) {
@@ -27,6 +27,10 @@ function PolicySummary({ policy }) {
         <Heading size="small">Current rules</Heading>
         <Row label="Projects agents may write to:"><Tags items={policy.allowedProjects} empty="none yet (all agent writes are refused)" /></Row>
         <Row label="Always needs approval:"><Tags items={needsApproval} empty="nothing" /></Row>
+        <Row label="Context that needs a human:">
+          <Tags items={contextRulesSummary(policy)} empty="context checks are off" />
+          {policy.contextRisk?.enabled && <Text size="small">{`release window ${policy.contextRisk.releaseWindowDays} days · ${policy.contextRisk.useTeamworkGraph ? 'Jira + Teamwork Graph' : 'Jira only'}`}</Text>}
+        </Row>
         <Row label="Protected statuses:"><Tags items={policy.protectedStatuses} empty="none" /></Row>
         <Row label="Protected fields:"><Tags items={policy.protectedFields} empty="none" /></Row>
         <Row label="Caps:">

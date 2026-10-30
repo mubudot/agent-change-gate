@@ -23,9 +23,10 @@ function withContextIssue(payload) {
 const truthy = (v) => v === true || v === 'true';
 
 export function makeHandlers(getService) {
+  const svc = (payload, context) => getService(context, payload);
   const guarded = (kind) => async (payload, context) => {
     const input = withContextIssue(payload);
-    return getService().guardedChange(kind, input, actorFrom(payload, context), { preview: truthy(input.preview) });
+    return svc(payload, context).guardedChange(kind, input, actorFrom(payload, context), { preview: truthy(input.preview) });
   };
   return {
     commentIssues: guarded('jira.issue.comment'),
@@ -34,10 +35,12 @@ export function makeHandlers(getService) {
     editIssues: guarded('jira.issue.edit'),
     createIssue: guarded('jira.issue.create'),
     deleteIssues: guarded('jira.issue.delete'),
-    runApproved: async (payload, context) => getService().runApproved(String(payload?.approvalId ?? '').trim(), actorFrom(payload, context)),
+    runApproved: async (payload, context) => svc(payload, context).runApproved(String(payload?.approvalId ?? '').trim(), actorFrom(payload, context)),
     approvalStatus: async (payload, context) =>
-      getService().approvalStatus(String(payload?.approvalId ?? '').trim(), actorFrom(payload, context)),
-    myActivity: async (payload, context) => getService().myActivity(actorFrom(payload, context)),
-    policySummary: async () => getService().policySummary(),
+      svc(payload, context).approvalStatus(String(payload?.approvalId ?? '').trim(), actorFrom(payload, context)),
+    myActivity: async (payload, context) => svc(payload, context).myActivity(actorFrom(payload, context)),
+    policySummary: async (payload, context) => svc(payload, context).policySummary(),
+    // Read-only: Jira + Teamwork Graph context the gate sees for the issues (defaults to the viewed issue).
+    issueContext: async (payload, context) => svc(payload, context).issueContext(withContextIssue(payload), actorFrom(payload, context)),
   };
 }

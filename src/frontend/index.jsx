@@ -57,7 +57,7 @@ function App() {
     <Box paddingInline="space.300" paddingBlockEnd="space.300">
       <Stack space="space.300">
         <Inline spread="space-between" alignBlock="center" shouldWrap>
-          <Text>Every Jira write an AI agent makes through this app passes a deterministic policy check first.</Text>
+          <Text>Before an AI agent writes to Jira, the gate checks what the issue is connected to (releases, blockers, goals, pull requests, deployments) and asks a human when it matters.</Text>
           <Button appearance="subtle" isDisabled={loading} onClick={load}>{loading ? 'Refreshing…' : 'Refresh'}</Button>
         </Inline>
         {error && <SectionMessage appearance="warning"><Text>{`Refresh failed, showing earlier data: ${error}`}</Text></SectionMessage>}

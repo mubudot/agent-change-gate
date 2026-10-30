@@ -11,9 +11,9 @@ import { normalizePolicy } from '../src/policy/policy.js';
 const twoApprovers = { policy: { approvers: [ALICE, BOB] } };
 const simulated = (audit) => audit.filter((e) => e.source === 'simulated');
 
-test('presets: three cases, dry run without an issue key, live with one', () => {
+test('presets: five cases, dry run without an issue key, live with one', () => {
   const { policy } = normalizePolicy({ allowedProjects: ['DEMO'] });
-  assert.deepEqual(presetList().map((p) => p.expect), ['ALLOW', 'NEEDS_APPROVAL', 'DENY']);
+  assert.deepEqual(presetList().map((p) => p.expect), ['ALLOW', 'NEEDS_APPROVAL', 'ALLOW', 'NEEDS_APPROVAL', 'DENY']);
   const dry = buildPreset('allow-comment', policy).plan;
   assert.equal(dry.simulation.mode, 'dry-run');
   assert.equal(dry.input.issueKeys, 'DEMO-9001');

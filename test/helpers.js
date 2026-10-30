@@ -48,7 +48,7 @@ export function fakeJira({ admins = [BOB], issues } = {}) {
     if (!key || !state.issues[key]) return { status: 404, data: { errorMessages: ['Issue does not exist'] } };
     const issue = state.issues[key];
     if (method === 'GET' && m[2] === '/transitions') return { status: 200, data: { transitions } };
-    if (method === 'GET') return { status: 200, data: { id: issue.id, key: issue.key ?? key, fields: { project: { id: state.projects[issue.project]?.id, key: issue.project }, status: { name: issue.status }, summary: 's' } } };
+    if (method === 'GET') return { status: 200, data: { id: issue.id, key: issue.key ?? key, fields: { project: { id: state.projects[issue.project]?.id, key: issue.project }, status: { name: issue.status }, summary: 's', ...(issue.fields ?? {}) } } };
     if (state.failWrites.has(key)) return { status: 400, data: { errorMessages: ['boom'] } };
     if (method === 'POST' && m[2] === '/transitions') {
       issue.status = transitions.find((t) => t.id === body.transition.id).to.name;
@@ -63,7 +63,7 @@ export function fakeJira({ admins = [BOB], issues } = {}) {
   return { state, client: new JiraClient(request) };
 }
 
-export async function setup({ policy = {}, admins } = {}) {
+export async function setup({ policy = {}, admins, graph = null } = {}) {
   let t = Date.UTC(2026, 10, 2, 9, 0, 0);
   const store = new MemoryStore(() => t);
   const repo = new Repo(store);
@@ -72,6 +72,7 @@ export async function setup({ policy = {}, admins } = {}) {
   const svc = new GateService({
     repo,
     jira: jira.client,
+    graph,
     now: () => t,
     newId: () => `id-${String(++n).padStart(6, '0')}`,
   });
@@ -82,5 +83,23 @@ export async function setup({ policy = {}, admins } = {}) {
     advance: (ms) => { t += ms; },
     as: (who) => { jira.state.caller = who; },
     writes: () => jira.state.calls.filter((c) => c.method !== 'GET'),
+  };
+}
+
+/** Fake Teamwork Graph: answers workItemContext from a map of issueId -> facts. */
+export function fakeGraph(byIssueId = {}, { errors = [], fail = false } = {}) {
+  const calls = [];
+  return {
+    calls,
+    byIssueId,
+    async ping() { return fail ? { ok: false, error: 'down' } : { ok: true }; },
+    async workItemContext(ids) {
+      calls.push(ids);
+      if (fail) throw new Error('graph down');
+      return {
+        byIssue: Object.fromEntries(ids.map((id) => [id, byIssueId[id] ?? { goals: [], pullRequests: [], deployments: [] }])),
+        errors,
+      };
+    },
   };
 }

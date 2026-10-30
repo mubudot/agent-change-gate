@@ -6,6 +6,7 @@ import { KvsStore } from './store/kvs.js';
 import { Repo } from './store/repo.js';
 import { JiraClient } from './jira/client.js';
 import { GateService } from './service.js';
+import { TeamworkGraphClient, cloudIdFrom } from './context/graph-client.js';
 import { makeHandlers } from './actions.js';
 import { buildResolver } from './resolvers.js';
 
@@ -28,7 +29,26 @@ async function requestAsUser(method, path, body) {
   return { status: res.status, data };
 }
 
-const service = () => new GateService({ repo: new Repo(new KvsStore(kvs, WhereConditions)), jira: new JiraClient(requestAsUser) });
+// Teamwork Graph (Preview) as the same user: results are filtered by what that user may see.
+async function graphAsUser(query, variables) {
+  const res = await asUser().requestTeamworkGraph(query, variables);
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { errors: [{ message: `non-JSON response: ${text.slice(0, 120)}` }] };
+  }
+  return { status: res.status, data };
+}
+
+// The Forge context (second handler argument) carries the site; Rovo payloads also include it.
+const service = (context, payload) =>
+  new GateService({
+    repo: new Repo(new KvsStore(kvs, WhereConditions)),
+    jira: new JiraClient(requestAsUser),
+    graph: new TeamworkGraphClient(graphAsUser, cloudIdFrom(context) ?? cloudIdFrom(payload?.context)),
+  });
 
 const h = makeHandlers(service);
 export const commentIssues = h.commentIssues;
@@ -41,6 +61,7 @@ export const runApproved = h.runApproved;
 export const approvalStatus = h.approvalStatus;
 export const myActivity = h.myActivity;
 export const policySummary = h.policySummary;
+export const issueContext = h.issueContext;
 
 // ---- UI resolvers for the approval dashboard (jira:globalPage) ----
 export const uiResolver = buildResolver(service);

@@ -6,27 +6,33 @@ import { fingerprintOperation, canonicalJson } from './policy/fingerprint.js';
 import { createRequest, decide, claim, finish, withExpiry, GateError, Status } from './policy/approvals.js';
 import { clone } from './policy/policy.js';
 import { resolveOperation, executeOperation, outcomeOf } from './jira/executor.js';
-import { jiraForSimulation, simulateRequest, runSimulatedRequest } from './simulation/simulator.js';
+import { graphForSimulation, jiraForSimulation, simulateRequest, runSimulatedRequest } from './simulation/simulator.js';
+import { EMPTY_CONTEXT, collectContext, contextApplies } from './context/collector.js';
+import { parseIssueKeys } from './policy/ops.js';
 
 // Approval reasons a human approval is allowed to cover at run time even if their
 // exact numbers changed (usage moves between request and execution).
-const RATE_CODES = new Set(['HOURLY_LIMIT', 'DAILY_LIMIT', 'SITE_DAILY_LIMIT']);
+// CONTEXT_UNAVAILABLE is tolerated too: a human already reviewed the change with the context
+// available at request time, and a transient graph outage must not strand an approved change.
+const RATE_CODES = new Set(['HOURLY_LIMIT', 'DAILY_LIMIT', 'SITE_DAILY_LIMIT', 'CONTEXT_UNAVAILABLE']);
 
 export class GateService {
   /**
    * @param {{repo: import('./store/repo.js').Repo, jira: import('./jira/client.js').JiraClient,
+   *          graph?: import('./context/graph-client.js').TeamworkGraphClient,
    *          now?: () => number, newId?: () => string}} deps
    */
-  constructor({ repo, jira, now = () => Date.now(), newId }) {
+  constructor({ repo, jira, graph = null, now = () => Date.now(), newId }) {
     this.repo = repo;
     this.jira = jira;
+    this.graph = graph;
     this.now = now;
     this.newId = newId ?? (() => globalThis.crypto.randomUUID());
   }
 
-  /** Same repo, clock and ids, different Jira client (used for dry-run simulations). */
-  withJira(jira) {
-    return new GateService({ repo: this.repo, jira, now: this.now, newId: this.newId });
+  /** Same repo, clock and ids, different Jira (and graph) client (used for dry-run simulations). */
+  withJira(jira, graph = this.graph) {
+    return new GateService({ repo: this.repo, jira, graph, now: this.now, newId: this.newId });
   }
 
   /**
@@ -53,10 +59,11 @@ export class GateService {
     if (resolveErrors.length) return out('INVALID', { errors: resolveErrors });
 
     const now = this.now();
+    const context = op.targets.length <= policy.maxTargetsPerCall ? await this.context(op, plan, policy) : EMPTY_CONTEXT;
     const usage = await this.repo.getUsage(actor, now, policy.timezone);
-    const decision = evaluate(policy, op, usage, { policyErrors });
+    const decision = evaluate(policy, op, usage, { policyErrors, context });
     const fingerprint = fingerprintOperation(op);
-    const base = { verdict: decision.verdict, reasons: decision.reasons };
+    const base = { verdict: decision.verdict, reasons: decision.reasons, ...contextView(context) };
 
     if (preview) return out('PREVIEW', { ...base, message: previewMessage(decision) });
 
@@ -82,6 +89,7 @@ export class GateService {
         });
       if (!existing) {
         req.source = origin.source;
+        if (context.checked) req.context = storedContext(context);
         if (origin.simulation) req.simulation = clone(origin.simulation);
         await this.repo.saveRequest(req);
         if (origin.simulation) await this.repo.indexSimulation(req.id, now);
@@ -121,7 +129,8 @@ export class GateService {
       }
       // A dry-run simulation is bound to the dry-run client at creation, whichever entry point runs it.
       if (stored.simulation?.mode === 'dry-run') {
-        return this.withJira(jiraForSimulation(stored.simulation, this.jira)).runStored(stored, approvalId, actor);
+        return this.withJira(jiraForSimulation(stored.simulation, this.jira), graphForSimulation(stored.simulation, this.graph))
+          .runStored(stored, approvalId, actor);
       }
     }
     return this.runStored(stored, approvalId, actor);
@@ -148,9 +157,11 @@ export class GateService {
     const op = clone(stored.op);
     const { plan, errors: resolveErrors } = await this.resolve(op);
     const usage = await this.repo.getUsage(actor, now, policy.timezone);
+    // Context is re-read too: an issue that joined a release or a goal since approval is a new risk.
+    const context = resolveErrors.length ? EMPTY_CONTEXT : await this.context(op, plan, policy);
     const decision = resolveErrors.length
       ? { verdict: Verdict.DENY, reasons: resolveErrors.map((m) => ({ code: 'RESOLVE_FAILED', message: m })) }
-      : evaluate(policy, op, usage, { policyErrors });
+      : evaluate(policy, op, usage, { policyErrors, context });
     // A change to the authority configuration invalidates old decisions, including
     // approvals made with a previously disabled two-person rule.
     if (stored.approvalAuthority !== approvalAuthority(policy)) {
@@ -195,6 +206,34 @@ export class GateService {
     await this.repo.saveRequest(done);
     await this.audit({ actor, op, verdict: 'APPROVED', outcome, reasons: stored.reasons, approvalId, results, origin });
     return out(outcome, { approvalId, approvedBy: stored.decidedBy, results, ...dryRunFlag(origin) });
+  }
+
+  /**
+   * Read-only: what the gate knows about issues before any change (Jira + Teamwork Graph context),
+   * and what each signal would mean under the current policy. Writes nothing, takes no lock.
+   */
+  async issueContext(input, actor) {
+    if (!actor) return out('INVALID', { errors: ['no user context'] });
+    const errors = [];
+    const keys = parseIssueKeys(input?.issueKeys, errors);
+    if (errors.length) return out('INVALID', { errors });
+    const { policy } = await this.repo.loadPolicy();
+    if (keys.length > policy.maxTargetsPerCall) return out('INVALID', { errors: [`ask about at most ${policy.maxTargetsPerCall} issues at once`] });
+    const op = { kind: 'jira.issue.comment', targets: keys.map((issueKey) => ({ issueKey, projectKey: issueKey.split('-')[0] })), payload: {}, fields: [] };
+    const { plan, errors: resolveErrors } = await this.resolve(op);
+    if (resolveErrors.length) return out('INVALID', { errors: resolveErrors });
+    const context = await collectContext(op, plan, policy.contextRisk, { jira: this.jira, graph: this.graph, now: this.now() });
+    const meaning = (s) => policy.contextRisk.enabled ? policy.contextRisk.signals[s.signal] ?? 'off' : 'off';
+    return out('OK', {
+      issues: op.targets.map((t) => t.issueKey),
+      signals: context.signals.map((s) => ({ issueKey: s.issueKey, signal: s.signal, source: s.source, message: s.message, policy: meaning(s) })),
+      gaps: context.gaps.map((g) => g.message),
+      sources: context.sources,
+      appliesTo: policy.contextRisk.enabled ? policy.contextRisk.appliesTo : [],
+      message: context.signals.length
+        ? 'Signals marked approve or deny change the verdict for the operations listed in appliesTo.'
+        : 'No release, blocking, priority, goal, pull-request or deployment context found for these issues.',
+    });
   }
 
   async approvalStatus(approvalId, actor) {
@@ -263,7 +302,11 @@ export class GateService {
     // Page-load latency: two parallel stages instead of six sequential round-trips, and one
     // Jira permission call (isApprover reuses the admin answer when no approvers are listed).
     const now = this.now();
-    const [{ policy, errors }, isAdmin] = await Promise.all([this.repo.loadPolicy(), this.jira.isJiraAdmin()]);
+    const [{ policy, errors }, isAdmin, graphStatus] = await Promise.all([
+      this.repo.loadPolicy(),
+      this.jira.isJiraAdmin(),
+      this.graph ? this.graph.ping() : { ok: false, error: 'not configured' },
+    ]);
     const approver = policy.approvers.length ? policy.approvers.includes(actor) : isAdmin;
     const seesAll = approver || isAdmin;
     const [requests, audit, usage, simulations] = await Promise.all([
@@ -282,6 +325,7 @@ export class GateService {
       audit,
       siteUsageToday: usage.siteDay,
       simulations,
+      graphStatus,
     };
   }
 
@@ -341,6 +385,11 @@ export class GateService {
     return resolveOperation(op, this.jira);
   }
 
+  context(op, plan, policy) {
+    if (!contextApplies(policy, op)) return EMPTY_CONTEXT;
+    return collectContext(op, plan, policy.contextRisk, { jira: this.jira, graph: this.graph, now: this.now() });
+  }
+
   execute(op, plan) {
     return executeOperation(op, plan, this.jira);
   }
@@ -373,6 +422,23 @@ function originOf(req) {
 
 function sameOrigin(req, origin) {
   return (req.source ?? 'agent') === origin.source && (req.simulation?.mode ?? null) === (origin.simulation?.mode ?? null);
+}
+
+/** What the agent (and the UI) is told about context: short, no raw graph payloads. */
+function contextView(context) {
+  if (!context.checked) return {};
+  return {
+    context: {
+      sources: context.sources,
+      signals: context.signals.map((s) => ({ issueKey: s.issueKey, signal: s.signal, source: s.source, message: s.message })),
+      gaps: context.gaps.map((g) => g.message),
+    },
+  };
+}
+
+/** Snapshot kept on an approval request so the reviewer sees the context the gate saw. */
+function storedContext(context) {
+  return { checkedAt: context.checkedAt, ...contextView(context).context };
 }
 
 function dryRunFlag(origin) {

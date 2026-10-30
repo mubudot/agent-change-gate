@@ -4,7 +4,7 @@
 /** Replace guessed project keys with what Jira reports; resolve transitions per issue. */
 export async function resolveOperation(op, jira) {
   const errors = [];
-  const plan = { transitionIds: {} };
+  const plan = { transitionIds: {}, facts: {} };
   if (op.kind === 'jira.issue.create') {
     try {
       const project = await jira.getProject(op.payload.projectKey);
@@ -36,6 +36,7 @@ export async function resolveOperation(op, jira) {
     t.projectId = String(issue.projectId);
     t.projectKey = issue.projectKey;
     t.currentStatus = issue.status;
+    if (issue.facts) plan.facts[t.issueId] = issue.facts;
     if (op.kind === 'jira.issue.transition') {
       const want = String(op.toStatus).toLowerCase();
       let transitions;

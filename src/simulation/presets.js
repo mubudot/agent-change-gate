@@ -24,6 +24,23 @@ export const PRESETS = Object.freeze({
       input: { issueKeys: keys(1).join(','), toStatus: policy.protectedStatuses[0] ?? 'Done' },
     }),
   },
+  'routine-move': {
+    label: 'Routine move to In Review',
+    expect: 'ALLOW',
+    build: ({ keys }) => ({ kind: 'jira.issue.transition', input: { issueKeys: keys(1).join(','), toStatus: 'In Review' } }),
+  },
+  // Same command as routine-move. In a dry run the synthetic issue is wired to a release due in
+  // 3 days and a company goal, so the gate's context check (not the command) changes the verdict.
+  // With a real issue key, the real issue's Jira + Teamwork Graph context decides instead.
+  'context-move': {
+    label: 'Same move, issue ships this week',
+    expect: 'NEEDS_APPROVAL',
+    build: ({ keys }) => ({ kind: 'jira.issue.transition', input: { issueKeys: keys(1).join(','), toStatus: 'In Review' } }),
+    syntheticContext: (now) => ({
+      fixVersions: [{ name: 'Mobile 2.4', released: false, releaseDate: isoDay(now + 3 * 86_400_000) }],
+      goals: [{ name: 'Launch mobile checkout in Q4', archived: false }],
+    }),
+  },
   'blocked-bulk': {
     label: 'Runaway bulk close',
     expect: 'DENY',
@@ -39,9 +56,10 @@ export const PRESETS = Object.freeze({
  * @param {string} presetId key of PRESETS
  * @param {object} policy normalized policy
  * @param {string|undefined} rawIssueKey optional real issue; without it the request is a dry run
+ * @param {number} [now] creation time (synthetic release dates are relative to it)
  * @returns {{ plan?: {kind:string, input:object, simulation:object}, error?: string }}
  */
-export function buildPreset(presetId, policy, rawIssueKey) {
+export function buildPreset(presetId, policy, rawIssueKey, now = Date.now()) {
   const preset = Object.hasOwn(PRESETS, presetId) ? PRESETS[presetId] : null;
   if (!preset) return { error: `unknown preset '${presetId}'` };
   const issueKey = typeof rawIssueKey === 'string' ? rawIssueKey.trim().toUpperCase() : '';
@@ -58,8 +76,12 @@ export function buildPreset(presetId, policy, rawIssueKey) {
     mode: live ? 'live' : 'dry-run',
     projectKey,
     extraStatuses: input.toStatus ? [input.toStatus] : [],
+    // Frozen at creation so the run-time recheck sees the same synthetic facts.
+    ...(!live && preset.syntheticContext ? { context: preset.syntheticContext(now) } : {}),
   };
   return { plan: { kind, input, simulation } };
 }
 
 export const presetList = () => Object.entries(PRESETS).map(([id, p]) => ({ id, label: p.label, expect: p.expect }));
+
+const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
