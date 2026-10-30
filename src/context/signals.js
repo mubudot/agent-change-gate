@@ -4,6 +4,11 @@
 //     resolves the target, and
 //   - Teamwork Graph (goals, pull requests and deployments connected to the work item).
 // A signal never lowers risk. The gate decides what each signal means via policy.contextRisk.
+//
+// Each signal has two texts: `message` (with names, read with the REQUESTING user's permissions and
+// returned only to that user) and `shared` (counts and dates only). Anything stored on an approval
+// request or shown to other people uses `shared`, so approvers never see goal, pull request,
+// deployment or blocked-issue names they might not be allowed to read.
 
 export const SIGNALS = Object.freeze({
   RELEASE_SOON: 'RELEASE_SOON',
@@ -73,7 +78,8 @@ export function jiraSignals(issueKey, facts, cfg, nowMs, source = SOURCES.JIRA) 
   if (open.length) {
     out.push(signal(SIGNALS.BLOCKS_OPEN_WORK, issueKey, source,
       `${issueKey} blocks ${open.length} open issue${open.length === 1 ? '' : 's'} (${open.slice(0, MAX_NAMES).join(', ')}${open.length > MAX_NAMES ? ', …' : ''})`,
-      { blocks: open.slice(0, 20) }));
+      { blocks: open.slice(0, 20) },
+      `${issueKey} blocks ${open.length} open issue${open.length === 1 ? '' : 's'}`));
   }
   const high = (cfg.highPriorities ?? []).map((p) => p.toLowerCase());
   if (facts.priority && high.includes(String(facts.priority).toLowerCase())) {
@@ -94,12 +100,14 @@ export function graphSignals(issueKey, facts, source = SOURCES.GRAPH) {
   const goals = (facts.goals ?? []).filter((g) => g.archived !== true).map((g) => g.name || 'unnamed goal');
   if (goals.length) {
     out.push(signal(SIGNALS.LINKED_GOAL, issueKey, source,
-      `${issueKey} is linked to goal${goals.length === 1 ? '' : 's'} ${names(goals)}`, { goals: goals.slice(0, 10) }));
+      `${issueKey} is linked to goal${goals.length === 1 ? '' : 's'} ${names(goals)}`, { goals: goals.slice(0, 10) },
+      `${issueKey} is linked to ${goals.length} active goal${goals.length === 1 ? '' : 's'}`));
   }
   const prs = (facts.pullRequests ?? []).filter((p) => String(p.status ?? '').toUpperCase() === 'OPEN').map((p) => p.name || 'untitled pull request');
   if (prs.length) {
     out.push(signal(SIGNALS.OPEN_PULL_REQUEST, issueKey, source,
-      `${issueKey} has ${prs.length} open pull request${prs.length === 1 ? '' : 's'} (${names(prs)})`, { pullRequests: prs.slice(0, 10) }));
+      `${issueKey} has ${prs.length} open pull request${prs.length === 1 ? '' : 's'} (${names(prs)})`, { pullRequests: prs.slice(0, 10) },
+      `${issueKey} has ${prs.length} open pull request${prs.length === 1 ? '' : 's'}`));
   }
   const live = (facts.deployments ?? []).filter(
     (d) => String(d.environmentType ?? '').toUpperCase() === 'PRODUCTION' && !['FAILED', 'CANCELLED', 'ROLLED_BACK'].includes(String(d.state ?? '').toUpperCase()),
@@ -108,11 +116,12 @@ export function graphSignals(issueKey, facts, source = SOURCES.GRAPH) {
     const d = live[0];
     out.push(signal(SIGNALS.PRODUCTION_DEPLOYMENT, issueKey, source,
       `${issueKey} is part of a production deployment (${d.environment || d.name || 'production'}${d.state ? `, ${String(d.state).toLowerCase()}` : ''})`,
-      { deployments: live.slice(0, 10).map((x) => x.name || x.environment || 'deployment') }));
+      { deployments: live.slice(0, 10).map((x) => x.name || x.environment || 'deployment') },
+      `${issueKey} is part of a production deployment`));
   }
   return out;
 }
 
-function signal(type, issueKey, source, message, detail) {
-  return { signal: type, code: reasonCode(type), issueKey, source, message, detail };
+function signal(type, issueKey, source, message, detail, shared = message) {
+  return { signal: type, code: reasonCode(type), issueKey, source, message, shared, detail };
 }

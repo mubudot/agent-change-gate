@@ -1,7 +1,13 @@
 # Agent Change Gate
 
+> **Same agent. Same command. Different verdict.** Agent Change Gate reads what a Jira issue is *connected to*
+> (a release shipping this week, open work it blocks, a company goal, an open pull request, a production deployment)
+> before an AI agent is allowed to change it, and pulls in a human only when that context says it matters.
+
 A Forge app for Jira that gives Rovo agents and external MCP clients write tools backed by a
-**deterministic policy gate**: project allowlists, per-call / per-hour / per-day caps, protected fields and statuses,
+**deterministic, context-aware policy gate**. Context comes from the issue itself (fix versions, priority, "blocks"
+links) and from **Teamwork Graph** (linked goals, pull requests and deployments, read as the requesting user).
+Around that sit project allowlists, per-call / per-hour / per-day caps, protected fields and statuses,
 and human approval (two-person rule, single-use, expiring) for bulk or destructive changes.
 Dispatches have an audit intent recorded before Jira is called, followed by their outcome.
 The gate covers this app's tools; it cannot constrain other Jira tools or direct REST calls.
@@ -13,27 +19,56 @@ from a Rovo chat or an external MCP client on a live site. See `STATUS.md` for t
 
 **Demo video (2:58):** VIDEO_URL_PLACEHOLDER (YouTube; link added when the video is published)
 
-**Install for judges:** INSTALL_LINK_PLACEHOLDER (Forge "Start sharing your app" link; then follow
-[Testing with and without Rovo](#testing-with-and-without-rovo))
+**Install for judges:** [install Agent Change Gate on your Jira Cloud site](https://developer.atlassian.com/console/install/67a2afa4-d23d-4d5b-a9b7-1cf01c63defe?signature=AYABeMOYy2xGI9qOFPG1%2BVhSM6gAAAADAAdhd3Mta21zAEthcm46YXdzOmttczp1cy13ZXN0LTI6NzA5NTg3ODM1MjQzOmtleS83MDVlZDY3MC1mNTdjLTQxYjUtOWY5Yi1lM2YyZGNjMTQ2ZTcAuAECAQB4CxqLTo9l4lqXuFjNim1xJM%2Bp%2F3TVP9xHS2BrU5DRRucBFvKkfMY5YAWNYqJd8hgr6QAAAH4wfAYJKoZIhvcNAQcGoG8wbQIBADBoBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDJI50drpOZ9v9bcP7wIBEIA7NxXzVOZtJ97Xc86ozCnJZ0jhht3hQ6ltI205vzvhH3xgC2m%2FWatp1YrohFSMezy32gCyGAZq7WtgFtQAB2F3cy1rbXMAS2Fybjphd3M6a21zOmV1LXdlc3QtMTo3MDk1ODc4MzUyNDM6a2V5LzQ2MzBjZTZiLTAwYzMtNGRlMi04NzdiLTYyN2UyMDYwZTVjYwC4AQICAHi9bVMAkme4qVQX1fQHo6ePw3H40A7cGfz7yrmSfBWMXgGditovz04wvrAW6eo87HjoAAAAfjB8BgkqhkiG9w0BBwagbzBtAgEAMGgGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMpe9xflk2THfCH94aAgEQgDul26V%2BCSFHrVjcEaGfp9%2BlM5pkgYpAOtUTwYzE2nkjPhyQY9c7LTJSHD8U6%2FtohB5cQCecWp%2FIGrDkDgAHYXdzLWttcwBLYXJuOmF3czprbXM6dXMtZWFzdC0xOjcwOTU4NzgzNTI0MzprZXkvNmMxMjBiYTAtNGNkNS00OTg1LWI4MmUtNDBhMDQ5NTJjYzU3ALgBAgIAeDYASx0XCjkny4iLV6vz%2BKtEGSGT6kdt0QRpkn6D%2FlVEARLKhYeL0kJmRgzJY9zYmwMAAAB%2BMHwGCSqGSIb3DQEHBqBvMG0CAQAwaAYJKoZIhvcNAQcBMB4GCWCGSAFlAwQBLjARBAwq9n58xSBUNDYXIz8CARCAOx4DWJO0gIHc87DK6ykxOVmRLdEcOlJWUTrJAlBSd3Xq0kQOMqbAuCNbzfBK2Qu%2B8vaZLrmd0CUpbHRYAgAAAAAMAAAQAAAAAAAAAAAAAAAAADSCxVSkn2dDvIV2dK36H7L%2F%2F%2F%2F%2FAAAAAQAAAAAAAAAAAAAAAQAAADIPweEaJXk%2B4Sjej3OdKV3kB8%2FPFWQ0r8QJC7tP1V8EBfCvTdpG67tAk58h6kHGoi6W9DcXXkDuVbvc7sE3SjvwiNI%3D&product=jira)
+(Forge distribution link, production environment; an org admin must accept the scopes because Teamwork Graph scopes
+are organisation-wide. Then follow [Testing with and without Rovo](#testing-with-and-without-rovo).)
 
-Built for Codegeist 2026 (Apps for Software Teams; bonus: Rovo Agents, Atlassian MCP). See `DESIGN.md`.
+Built for Codegeist 2026 (Apps for Software Teams; bonus: Rovo Agents, Atlassian MCP, Teamwork Graph). See `DESIGN.md`.
+
+## Context-aware gating (Jira + Teamwork Graph)
+
+For transitions, edits, assignments and deletions, the gate reads each target's context in the same pass that
+resolves it, and each signal can only **raise** the verdict (policy `contextRisk.signals`: `off` / `approve` / `deny`):
+
+| Signal | Reason code | Source |
+|---|---|---|
+| Unreleased fix version due within `releaseWindowDays` (default 7) or overdue | `CONTEXT_RELEASE_SOON` | Jira issue fields |
+| Blocks issues that are not done | `CONTEXT_BLOCKS_OPEN_WORK` | Jira issue links |
+| Priority in `highPriorities` (default Highest) | `CONTEXT_HIGH_PRIORITY` | Jira issue fields |
+| Linked to an active goal | `CONTEXT_LINKED_GOAL` | Teamwork Graph `jiraWorkItemGoals` |
+| Has an open pull request | `CONTEXT_OPEN_PULL_REQUEST` | Teamwork Graph `jiraWorkItemLinkedExternalPullRequests` |
+| Part of a production deployment | `CONTEXT_PRODUCTION_DEPLOYMENT` | Teamwork Graph `jiraWorkItemLinkedExternalDeployments` |
+
+- Teamwork Graph is called with `asUser().requestTeamworkGraph()` (Forge **Preview** API since 2026-10-15), using
+  curated queries only, one batched request per family. Results are permission-filtered for the requesting user.
+- Approvers see count-only texts ("linked to 1 active goal"); goal, PR, deployment and blocked-issue names are returned
+  only to the requesting user, whose permissions were used to read them.
+- An approval covers the context the approver saw: at run time the gate re-reads context, and any new
+  issue + signal pair (for example a second target that joined a release) is a `NEW_RISK` refusal.
+- Graph errors or more than 25 linked items are reported as gaps; `onGraphUnavailable: "approve"` turns them into a
+  human check (default `ignore`: Jira context still applies). Missing Jira facts always need a human.
+- New read-only tool **`acg-issue-context`** ("What could go wrong if you move this issue?") shows what the gate sees.
+- On a site with nothing connected to Teamwork Graph (e.g. a fresh free dev site) the graph simply returns no links;
+  the Jira signals still work, and the dashboard shows whether Teamwork Graph is connected.
 
 ## What's inside
 
-- `rovo:agent` **Change Gate Agent**, `rovo:skill` **agent-change-gate**, `rovo:mcp` **Agent Change Gate** (same 10 tools)
+- `rovo:agent` **Change Gate Agent**, `rovo:skill` **agent-change-gate**, `rovo:mcp` **Agent Change Gate** (same 11 tools)
 - Tools: comment, transition, assign, edit (summary/priority/due date/labels), create, delete (approval only),
-  run-approved-change, approval-status, my-activity, policy-summary. The six change-request tools support `preview: true`;
+  run-approved-change, approval-status, my-activity, policy-summary, issue-context (read-only). The six change-request tools support `preview: true`;
   run-approved-change executes an approved request.
 - Jira global page **Agent Change Gate**: approvals, audit log, policy JSON editor, kill switch, and an admin-only
   **Simulate an agent request** panel (see below).
-- Forge KVS storage only, no external egress.
+- Forge KVS storage only, no external egress. Teamwork Graph scopes are read-only, per object type
+  (`read:graph:issue:jira`, `read:graph:goal:atlassian`, `read:graph:pull-request:external`,
+  `read:graph:deployment:external`).
 
 ## Run the tests (no Atlassian account needed)
 
 ```bash
 node --version   # tests require Node >= 22; the Forge CLI may require a newer patch
 npm ci
-node --test test/*.test.js        # 118 tests, no Atlassian account or network needed
+node --test test/*.test.js        # 141 tests, no Atlassian account or network needed
 # optional: validate manifest.yml against the schema bundled with a local Forge CLI checkout
 # (npm i -g @forge/cli, then point FORGE_CLI_DIR at its install directory)
 FORGE_CLI_DIR=<path-to-@forge/cli> node scripts/validate-manifest.cjs
@@ -76,6 +111,8 @@ decides the verdict from the current policy.
 | Low-risk comment | comment on one issue | ALLOW: runs at once |
 | Move to protected status | transition one issue into the first protected status (Done) | NEEDS APPROVAL (`PROTECTED_STATUS`) |
 | Runaway bulk close | transition `maxTargetsPerCall + 1` issues | DENY (`TOO_MANY_TARGETS`), before any issue is read |
+| Move to In Review | transition one issue with no links | ALLOW |
+| Same move, issue ships this week | the identical transition; in a dry run the synthetic issue is in a release due in 3 days and linked to a goal | NEEDS APPROVAL (`CONTEXT_RELEASE_SOON`, `CONTEXT_LINKED_GOAL`) |
 
 - Leave **Issue key** empty for a **dry run**: the request uses synthetic issues (`<first allowed project>-9001…`)
   and a stand-in Jira client, so no issue is read or written (only the admin permission check calls Jira). Enter a real key (e.g. `KAN-1`) for a **live** run:
@@ -89,7 +126,9 @@ decides the verdict from the current policy.
   request can never write to Jira, whichever entry point runs it. Non-admins cannot simulate or run simulated
   requests, from the page or through `run-approved-change`.
 
-**With Rovo:** open Rovo chat → pick **Change Gate Agent** → e.g. *"Comment 'ready for review' on KAN-1"* (runs),
+**With Rovo:** open Rovo chat → pick **Change Gate Agent** → e.g. *"What could go wrong if you move KAN-2?"*
+(issue-context), *"Move KAN-1 to In Review"* (runs) vs *"Move KAN-2 to In Review"* where KAN-2 has a fix version
+due this week (PENDING_APPROVAL with `CONTEXT_RELEASE_SOON`), *"Comment 'ready for review' on KAN-1"* (runs),
 *"Move KAN-1 to Done"* (returns PENDING_APPROVAL; approve it on the page, then ask the agent to run the approved
 change), *"Close these 25 issues"* (denied). Audit entries show **Source: Agent**.
 

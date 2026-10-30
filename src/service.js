@@ -7,14 +7,12 @@ import { createRequest, decide, claim, finish, withExpiry, GateError, Status } f
 import { clone } from './policy/policy.js';
 import { resolveOperation, executeOperation, outcomeOf } from './jira/executor.js';
 import { graphForSimulation, jiraForSimulation, simulateRequest, runSimulatedRequest } from './simulation/simulator.js';
-import { EMPTY_CONTEXT, collectContext, contextApplies } from './context/collector.js';
+import { EMPTY_CONTEXT, collectContext, contextApplies, signalKey } from './context/collector.js';
 import { parseIssueKeys } from './policy/ops.js';
 
 // Approval reasons a human approval is allowed to cover at run time even if their
 // exact numbers changed (usage moves between request and execution).
-// CONTEXT_UNAVAILABLE is tolerated too: a human already reviewed the change with the context
-// available at request time, and a transient graph outage must not strand an approved change.
-const RATE_CODES = new Set(['HOURLY_LIMIT', 'DAILY_LIMIT', 'SITE_DAILY_LIMIT', 'CONTEXT_UNAVAILABLE']);
+const RATE_CODES = new Set(['HOURLY_LIMIT', 'DAILY_LIMIT', 'SITE_DAILY_LIMIT']);
 
 export class GateService {
   /**
@@ -168,8 +166,7 @@ export class GateService {
       await this.repo.saveRequest(finish(req, { ok: false, result: { refused: 'AUTHORITY_CHANGED' }, now: this.now() }));
       return out('REFUSED', { code: 'AUTHORITY_CHANGED', message: 'approval authority changed; request a new approval' });
     }
-    const approvedCodes = new Set(stored.reasons.map((r) => r.code));
-    const newRisks = decision.reasons.filter((r) => !approvedCodes.has(r.code) && !RATE_CODES.has(r.code));
+    const newRisks = newRisksSince(stored, decision.reasons, context);
     if (decision.verdict === Verdict.DENY || newRisks.length) {
       const reasons = decision.verdict === Verdict.DENY ? decision.reasons : newRisks;
       const failed = finish(req, { ok: false, result: { refused: reasons }, now });
@@ -424,7 +421,37 @@ function sameOrigin(req, origin) {
   return (req.source ?? 'agent') === origin.source && (req.simulation?.mode ?? null) === (origin.simulation?.mode ?? null);
 }
 
-/** What the agent (and the UI) is told about context: short, no raw graph payloads. */
+/**
+ * Reasons a human has not yet approved. Non-context reasons compare by code (rate codes are
+ * exempt: usage moves between request and run). Context reasons compare per issue and signal,
+ * so a second target that joined a release since approval is a new risk even though the code
+ * CONTEXT_RELEASE_SOON was already approved for the first. CONTEXT_UNAVAILABLE is tolerated only
+ * when the approver reviewed a checked context (a later outage must not strand the change), never
+ * when context checks were off at request time.
+ */
+function newRisksSince(stored, reasons, context) {
+  const approvedCodes = new Set(stored.reasons.map((r) => r.code));
+  const reviewed = stored.context ? new Set((stored.context.signals ?? []).map(signalKey)) : null;
+  const out = [];
+  for (const r of reasons) {
+    if (RATE_CODES.has(r.code)) continue;
+    if (r.code === 'CONTEXT_UNAVAILABLE') {
+      if (!reviewed && !approvedCodes.has(r.code)) out.push(r);
+      continue;
+    }
+    if (!r.code.startsWith('CONTEXT_')) {
+      if (!approvedCodes.has(r.code)) out.push(r);
+      continue;
+    }
+    const fresh = (context.signals ?? []).filter((sig) => sig.code === r.code && !(reviewed?.has(signalKey(sig))));
+    if (!approvedCodes.has(r.code) || fresh.length) {
+      out.push(fresh.length ? { ...r, message: fresh.map((x) => x.shared ?? x.message).join('; ') } : r);
+    }
+  }
+  return out;
+}
+
+/** What the requesting agent is told about context (its own permissions): short, no raw graph payloads. */
 function contextView(context) {
   if (!context.checked) return {};
   return {
@@ -436,9 +463,17 @@ function contextView(context) {
   };
 }
 
-/** Snapshot kept on an approval request so the reviewer sees the context the gate saw. */
+/**
+ * Snapshot kept on an approval request so the reviewer sees the context the gate saw. Uses the
+ * shared (count-only) texts: it is shown to approvers who may not see what the requester sees.
+ */
 function storedContext(context) {
-  return { checkedAt: context.checkedAt, ...contextView(context).context };
+  return {
+    checkedAt: context.checkedAt,
+    sources: context.sources,
+    signals: context.signals.map((s) => ({ issueId: s.issueId, issueKey: s.issueKey, signal: s.signal, source: s.source, message: s.shared ?? s.message })),
+    gaps: context.gaps.map((g) => g.message),
+  };
 }
 
 function dryRunFlag(origin) {

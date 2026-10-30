@@ -104,7 +104,7 @@ export function contextRiskReasons(policy, context) {
     const mode = cfg.signals?.[s.signal] ?? 'off';
     if (mode === 'off') continue;
     const g = grouped.get(s.code) ?? { mode, code: s.code, messages: [], sources: new Set() };
-    g.messages.push(s.message);
+    g.messages.push(s.shared ?? s.message); // reasons are stored and shown to approvers: no names
     g.sources.add(s.source);
     grouped.set(s.code, g);
   }
@@ -112,7 +112,7 @@ export function contextRiskReasons(policy, context) {
     const reason = { code: g.code, message: g.messages.join('; '), source: [...g.sources].join('+') };
     (g.mode === 'deny' ? out.deny : out.approve).push(reason);
   }
-  const gaps = (context.gaps ?? []).filter((g) => g.required || cfg.onGraphUnavailable === 'approve');
+  const gaps = (context.gaps ?? []).filter((g) => g.required || (g.graph && cfg.onGraphUnavailable === 'approve'));
   if (gaps.length) {
     out.approve.push({
       code: 'CONTEXT_UNAVAILABLE',

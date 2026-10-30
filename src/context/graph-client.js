@@ -57,7 +57,7 @@ export function buildFamilyQuery(familyKey, cloudId, issueIds) {
   const fields = issueIds.map((id, i) => {
     vars[`i${i}`] = workItemAri(cloudId, id);
     params.push(`$i${i}: ID!`);
-    return `i${i}: ${fam.field}(id: $i${i}, first: ${PAGE}) { edges { node { __typename ${fam.selection} } } }`;
+    return `i${i}: ${fam.field}(id: $i${i}, first: ${PAGE}) { edges { node { __typename ${fam.selection} } } pageInfo { hasNextPage } }`;
   });
   const query = `query agentChangeGate_${familyKey}(${params.join(', ')}) {\n  ${fields.join('\n  ')}\n}`;
   return { query, variables: vars };
@@ -88,11 +88,12 @@ export class TeamworkGraphClient {
 
   /**
    * @param {string[]} issueIds numeric Jira issue ids
-   * @returns {Promise<{byIssue: Record<string, {goals:any[], pullRequests:any[], deployments:any[]}>, errors: string[]}>}
+   * @returns {Promise<{byIssue: Record<string, {goals:any[], pullRequests:any[], deployments:any[], truncated:string[]}>, errors: string[]}>}
+   *   truncated lists families with more than one page; the collector reports them as gaps.
    */
   async workItemContext(issueIds) {
     const ids = [...new Set(issueIds.map(String))].filter((id) => ISSUE_ID.test(id));
-    const byIssue = Object.fromEntries(ids.map((id) => [id, { goals: [], pullRequests: [], deployments: [] }]));
+    const byIssue = Object.fromEntries(ids.map((id) => [id, { goals: [], pullRequests: [], deployments: [], truncated: [] }]));
     if (!ids.length) return { byIssue, errors: [] };
     if (!this.available) return { byIssue, errors: ['Teamwork Graph: no site id in the Forge context'] };
     const errors = [];
@@ -116,6 +117,7 @@ export class TeamworkGraphClient {
           const edges = data[`i${i}`]?.edges;
           if (!Array.isArray(edges)) return;
           byIssue[id][fam] = edges.map((e) => e?.node).filter(Boolean).map(FAMILIES[fam].parse);
+          if (data[`i${i}`]?.pageInfo?.hasNextPage === true) byIssue[id].truncated.push(fam);
         });
       }),
     );

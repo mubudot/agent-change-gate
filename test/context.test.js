@@ -64,8 +64,13 @@ test('issueFacts reads fixVersions, priority and outward "blocks" links only', (
       { type: { outward: 'relates to' }, outwardIssue: { key: 'A-4' } },
     ],
   });
-  assert.deepEqual(f, { fixVersions: [{ name: 'R1', released: false, releaseDate: '2026-11-05' }], priority: 'Highest', blocks: [{ key: 'A-2', done: false }] });
-  assert.deepEqual(issueFacts(undefined), { fixVersions: [], priority: null, blocks: [] });
+  assert.deepEqual(f, { missing: [], fixVersions: [{ name: 'R1', released: false, releaseDate: '2026-11-05' }], priority: 'Highest', blocks: [{ key: 'A-2', done: false }] });
+  assert.equal(issueFacts(undefined), null, 'malformed response is not "no risk"');
+  assert.deepEqual(issueFacts({ priority: { name: 'Low' } }).missing, ['fixVersions', 'issuelinks']);
+  // Every entry is evaluated: the only risky version sits at position 51.
+  const many = Array.from({ length: 50 }, (_, i) => ({ name: `old-${i}`, released: true, releaseDate: '2026-01-01' }));
+  many.push({ name: 'R51', released: false, releaseDate: '2026-11-03' });
+  assert.equal(jiraSignals('A-1', issueFacts({ fixVersions: many }), CFG, NOW)[0].detail.release, 'R51');
 });
 
 // ---------- Teamwork Graph client ----------
@@ -119,17 +124,18 @@ test('contextRiskReasons: one reason per signal type, modes off/approve/deny, ga
   const sig = (signal, issueKey, source = 'jira') => ({ signal, code: `CONTEXT_${signal}`, issueKey, source, message: `${issueKey} ${signal}` });
   const r = contextRiskReasons(policy, {
     signals: [sig('RELEASE_SOON', 'A-1'), sig('RELEASE_SOON', 'A-2'), sig('HIGH_PRIORITY', 'A-1'), sig('LINKED_GOAL', 'A-1', 'teamwork-graph')],
-    gaps: [{ source: 'teamwork-graph', message: 'graph down' }],
+    gaps: [{ source: 'teamwork-graph', graph: true, message: 'graph down' }],
   });
   assert.deepEqual(r.approve.map((x) => x.code), ['CONTEXT_RELEASE_SOON']);
   assert.equal(r.approve[0].message, 'A-1 RELEASE_SOON; A-2 RELEASE_SOON');
   assert.deepEqual(r.deny.map((x) => [x.code, x.source]), [['CONTEXT_LINKED_GOAL', 'teamwork-graph']]);
   // Graph outage ignored by default; required (Jira) gaps always need a human.
   const strict = normalizePolicy({ contextRisk: { onGraphUnavailable: 'approve' } }).policy;
-  const gap = { signals: [], gaps: [{ source: 'teamwork-graph', message: 'graph down' }] };
+  const gap = { signals: [], gaps: [{ source: 'teamwork-graph', graph: true, message: 'graph down' }] };
   assert.equal(contextRiskReasons(policy, gap).approve.length, 0);
   assert.equal(contextRiskReasons(strict, gap).approve[0].code, 'CONTEXT_UNAVAILABLE');
   assert.equal(contextRiskReasons(policy, { signals: [], gaps: [{ source: 'jira', required: true, message: 'x' }] }).approve[0].code, 'CONTEXT_UNAVAILABLE');
+  assert.equal(contextRiskReasons(strict, { signals: [], gaps: [{ source: 'jira', info: true, message: 'x' }] }).approve.length, 0, 'info gaps never escalate');
   const off = normalizePolicy({ contextRisk: { enabled: false } }).policy;
   assert.deepEqual(contextRiskReasons(off, { signals: [sig('RELEASE_SOON', 'A-1')], gaps: [] }), { deny: [], approve: [] });
 });
@@ -215,7 +221,7 @@ test('graph outage: ignored by default, needs a human when policy says so', asyn
   const lenient = await contextEnv({ graph: down() });
   const a = await lenient.svc.guardedChange('jira.issue.transition', { issueKeys: 'DEMO-1', toStatus: 'In Review' }, ALICE);
   assert.equal(a.status, 'EXECUTED');
-  assert.match(a.context.gaps[0], /graph down/);
+  assert.ok(a.context.gaps.some((g) => /graph down/.test(g)));
   const strict = await contextEnv({ graph: down(), policy: { contextRisk: { onGraphUnavailable: 'approve' } } });
   const b = await strict.svc.guardedChange('jira.issue.transition', { issueKeys: 'DEMO-1', toStatus: 'In Review' }, ALICE);
   assert.equal(b.status, 'PENDING_APPROVAL');
@@ -280,4 +286,63 @@ test('context presets: identical command, dry-run context changes the verdict, r
   assert.equal(run.status, 'EXECUTED');
   assert.equal(run.dryRun, true);
   assert.equal(env.writes().length, 0, 'dry runs never write to Jira');
+});
+
+// ---------- review fixes (Codex round 1) ----------
+
+test('approver-facing reasons and stored snapshots never carry graph names; the requester sees them', async () => {
+  const graph = fakeGraph({ 10001: { goals: [{ name: 'Secret acquisition' }], pullRequests: [{ name: 'hidden-pr', status: 'OPEN' }], deployments: [] } });
+  const env = await contextEnv({ graph });
+  env.jira.state.issues['DEMO-2'].fields = { ...releaseIn(3), issuelinks: [{ type: { outward: 'blocks' }, outwardIssue: { key: 'HR-7', fields: { status: { statusCategory: { key: 'new' } } } } }] };
+  const r = await env.svc.guardedChange('jira.issue.transition', { issueKeys: 'DEMO-2', toStatus: 'In Review' }, ALICE);
+  assert.equal(r.status, 'PENDING_APPROVAL');
+  assert.ok(r.context.signals.some((x) => /Secret acquisition/.test(x.message)), 'requester (own permissions) sees names');
+  const stored = await env.repo.getRequest(r.approvalId);
+  const shown = JSON.stringify({ reasons: stored.reasons, context: stored.context, reply: r.reasons });
+  for (const secret of ['Secret acquisition', 'hidden-pr', 'HR-7']) assert.ok(!shown.includes(secret), secret);
+  assert.match(shown, /linked to 1 active goal/);
+});
+
+test('a second target that joined an already-approved risk type is a NEW_RISK', async () => {
+  const env = await contextEnv();
+  const r = await env.svc.guardedChange('jira.issue.transition', { issueKeys: 'DEMO-2,DEMO-1', toStatus: 'In Review' }, ALICE);
+  assert.equal(r.status, 'PENDING_APPROVAL');
+  env.as(BOB);
+  await env.svc.decideRequest(r.approvalId, true, undefined, BOB);
+  env.jira.state.issues['DEMO-1'].fields = releaseIn(2);
+  env.as(ALICE);
+  const run = await env.svc.runApproved(r.approvalId, ALICE);
+  assert.equal(run.code, 'NEW_RISK');
+  assert.match(run.reasons[0].message, /DEMO-1/);
+  assert.doesNotMatch(run.reasons[0].message, /DEMO-2/);
+  assert.equal(env.writes().length, 0);
+});
+
+test('outage tolerance does not cover context checks that were off when the change was approved', async () => {
+  const graph = fakeGraph();
+  const env = await contextEnv({ graph, policy: { contextRisk: { enabled: false }, protectedStatuses: ['In Review'] } });
+  const r = await env.svc.guardedChange('jira.issue.transition', { issueKeys: 'DEMO-1', toStatus: 'In Review' }, ALICE);
+  assert.equal(r.status, 'PENDING_APPROVAL');
+  env.as(BOB);
+  await env.svc.decideRequest(r.approvalId, true, undefined, BOB);
+  assert.equal((await env.svc.savePolicy({ allowedProjects: ['DEMO'], requireDistinctApprover: false, protectedStatuses: ['In Review'], contextRisk: { onGraphUnavailable: 'approve' } }, BOB)).status, 'OK');
+  graph.workItemContext = async () => { throw new Error('graph down'); };
+  env.as(ALICE);
+  const run = await env.svc.runApproved(r.approvalId, ALICE);
+  assert.equal(run.status, 'REFUSED');
+  assert.ok(['NEW_RISK', 'AUTHORITY_CHANGED'].includes(run.code));
+  assert.equal(env.writes().length, 0);
+});
+
+test('graph results with more pages are reported as a gap (and escalate when policy says so)', async () => {
+  const graph = new TeamworkGraphClient(async (query) => ({
+    status: 200,
+    data: { data: { i0: { edges: query.includes('PullRequests') ? Array.from({ length: 25 }, () => ({ node: { displayName: 'm', status: 'MERGED' } })) : [], pageInfo: { hasNextPage: query.includes('PullRequests') } } } },
+  }), CLOUD);
+  const res = await graph.workItemContext(['10000']);
+  assert.deepEqual(res.byIssue['10000'].truncated, ['pullRequests']);
+  const env = await contextEnv({ graph, policy: { contextRisk: { onGraphUnavailable: 'approve' } } });
+  const r = await env.svc.guardedChange('jira.issue.transition', { issueKeys: 'DEMO-1', toStatus: 'In Review' }, ALICE);
+  assert.equal(r.status, 'PENDING_APPROVAL');
+  assert.match(r.reasons[0].message, /more than 25 linked pullRequests/);
 });

@@ -33,12 +33,14 @@ export async function collectContext(op, plan, cfg, { jira, graph, now }) {
       continue;
     }
     sources.add(jiraSource);
-    signals.push(...jiraSignals(t.issueKey, facts, cfg, now, jiraSource));
+    signals.push(...withId(t, jiraSignals(t.issueKey, facts, cfg, now, jiraSource)));
+    // Informational only: a field Jira omits is not configured for that issue.
+    if (facts.missing?.length) gaps.push({ source: jiraSource, info: true, message: `${t.issueKey}: ${facts.missing.join(', ')} not configured` });
   }
 
   if (cfg.useTeamworkGraph && targets.length) {
     if (!graph) {
-      gaps.push({ source: SOURCES.GRAPH, message: 'Teamwork Graph client is not configured' });
+      gaps.push({ source: SOURCES.GRAPH, graph: true, message: 'Teamwork Graph client is not configured' });
     } else {
       let res;
       try {
@@ -46,11 +48,23 @@ export async function collectContext(op, plan, cfg, { jira, graph, now }) {
       } catch (e) {
         res = { byIssue: {}, errors: [`Teamwork Graph: ${String(e?.message ?? e).slice(0, 200)}`] };
       }
-      for (const message of res.errors ?? []) gaps.push({ source: graphSource, message });
+      for (const message of res.errors ?? []) gaps.push({ source: graphSource, graph: true, message });
       const answered = Object.keys(res.byIssue ?? {}).length > 0 && (res.errors ?? []).length < 3;
       if (answered) sources.add(graphSource);
-      for (const t of targets) signals.push(...graphSignals(t.issueKey, res.byIssue?.[t.issueId], graphSource));
+      for (const t of targets) {
+        const facts = res.byIssue?.[t.issueId];
+        signals.push(...withId(t, graphSignals(t.issueKey, facts, graphSource)));
+        // More than one page of links: unchecked items could hold a risk, so say so.
+        for (const fam of facts?.truncated ?? []) {
+          gaps.push({ source: graphSource, graph: true, message: `${t.issueKey}: more than 25 linked ${fam}; only the first 25 were checked` });
+        }
+      }
     }
   }
   return { checked: true, checkedAt: now, signals, gaps, sources: [...sources] };
 }
+
+const withId = (t, list) => list.map((s) => ({ ...s, issueId: String(t.issueId) }));
+
+/** Stable identity of a signal for run-time comparison: same issue, same signal type. */
+export const signalKey = (s) => `${s.issueId ?? s.issueKey}:${s.signal}`;
