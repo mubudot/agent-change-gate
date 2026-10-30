@@ -1,0 +1,57 @@
+name: forge
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Forge action
+        required: true
+        type: choice
+        options: [whoami, register, deploy, install]
+      site:
+        description: Atlassian site for install (e.g. example.atlassian.net)
+        required: false
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: forge
+  cancel-in-progress: false
+jobs:
+  forge:
+    runs-on: ubuntu-latest
+    env:
+      FORGE_EMAIL: ${{ secrets.FORGE_EMAIL }}
+      FORGE_API_TOKEN: ${{ secrets.FORGE_API_TOKEN }}
+      FORGE_DISABLE_ANALYTICS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install deps
+        run: npm ci || npm install
+      - name: whoami
+        if: inputs.action == 'whoami'
+        run: npx --yes @forge/cli@15 whoami
+      - name: register
+        if: inputs.action == 'register'
+        run: npx --yes @forge/cli@15 register --accept-terms "Agent Change Gate" </dev/null
+      - name: commit app id
+        if: inputs.action == 'register'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.yml
+          git diff --cached --quiet || { git commit -m "Register Forge app id" && git push origin HEAD:main; }
+      - name: deploy
+        if: inputs.action == 'deploy'
+        run: |
+          npx --yes @forge/cli@15 lint
+          npx --yes @forge/cli@15 deploy -e development --non-interactive
+      - name: install
+        if: inputs.action == 'install'
+        env:
+          SITE: ${{ inputs.site }}
+        run: |
+          test -n "$SITE" || { echo "site input required"; exit 1; }
+          npx --yes @forge/cli@15 install --site "$SITE" --product jira -e development --non-interactive --upgrade --confirm-scopes
