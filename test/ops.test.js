@@ -62,3 +62,17 @@ test('oversized text and label sets are rejected before they reach storage', () 
   const labels = Array.from({ length: 51 }, (_, i) => `l${i}`).join(',');
   assert.match(e('jira.issue.edit', { issueKeys: 'DEMO-1', labelsAdd: labels }), /at most 50 labels/);
 });
+
+
+test('short operation names cannot bypass input size bounds', () => {
+  const cases = [
+    ['jira.issue.transition', { issueKeys: 'DEMO-1', toStatus: 'x'.repeat(256) }],
+    ['jira.issue.edit', { issueKeys: 'DEMO-1', priority: 'x'.repeat(256) }],
+    ['jira.issue.create', { projectKey: 'DEMO', summary: 's', issueType: 'x'.repeat(256) }],
+  ];
+  for (const [kind, input] of cases) {
+    const result = buildOperation(kind, input);
+    assert.equal(result.op, null);
+    assert.match(result.errors.join(' '), /at most 255/);
+  }
+});

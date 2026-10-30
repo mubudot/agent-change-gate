@@ -82,7 +82,7 @@ NEEDS_APPROVAL (a human approver can say yes):
 ## Storage / audit (`src/store/`)
 
 Forge KVS only (no egress → eligible for "Runs on Atlassian"). Keys: `policy`, `req:<id>`, `open:<id>` (index),
-`pending:<acct>:<fingerprint>` (point lookup), `claim:<id>`, `mutation-lock`, `usage:*` (TTL), `audit:<inverted-ts>:<id>` and per-user `auditu:<acct-hash>:…` (90-day TTL).
+`pending:<acct>:<fingerprint>` (point lookup), `claim:<id>`, `mutation-lock:<bucket>` (TTL), `usage:*` (TTL), `audit:<inverted-ts>:<id>` and per-user `auditu:<acct-hash>:…` (90-day TTL).
 Audit entries hold kind, issue keys, verdict, outcome, reason codes, approvalId — not comment bodies.
 Usage reservation and an `EXECUTION_STARTED` audit intent must succeed before Jira dispatch. A final outcome follows;
 if the invocation stops or a Jira response is lost, the intent remains and usage is not refunded. Approval records
@@ -90,9 +90,11 @@ do contain full write payloads and currently have no retention purge.
 
 All mutations (policy updates, human decisions, queuing, previews, execution) acquire one installation-wide
 `FAIL_IF_EXISTS` storage lock. Contention returns `REFUSED` / `BUSY`. Counters are updated while holding the lock,
-before writes; failed attempts still count. The lock is a 120 s lease with an owner token: longer than any
-Forge invocation (25 s default, no long-running functions declared), so it cannot expire under a live owner, and a
-crashed invocation unblocks itself. Release deletes only the caller's own lease. This serialises agent writes per
+before writes; failed attempts still count. The lock is a 60 s owner-token lease, one KVS key per 120 s
+bucket: create your bucket's key with `FAIL_IF_EXISTS`, then back off if the previous or next bucket holds a live
+lease (adjacent callers each write then read, so one always sees the other). The lease outlives any Forge
+invocation (25 s default) but not a bucket, and expired-but-unswept keys (which still block `FAIL_IF_EXISTS`) are
+simply left behind, so a crashed invocation unblocks within one bucket. Release deletes only the caller's own lease. This serialises agent writes per
 site — fine for the hackathon scale; see `STATUS.md`.
 
 Per-call bulk limits apply to the submitted call. The gate cannot infer a logical task across separate calls;

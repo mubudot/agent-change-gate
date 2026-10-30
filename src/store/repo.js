@@ -4,8 +4,10 @@ import { GateError, withExpiry, Status } from '../policy/approvals.js';
 import { createHash } from 'node:crypto';
 
 const MAX_TS = 9_999_999_999_999;
-const LOCK_KEY = 'mutation-lock';
-export const LOCK_LEASE_MS = 120_000; // > Forge's 25 s default invocation limit
+// Mutation lock: one KVS key per fixed time bucket (see withMutation).
+const LOCK_PREFIX = 'mutation-lock:';
+export const LOCK_BUCKET_MS = 120_000;
+export const LOCK_LEASE_MS = 60_000; // > Forge's 25 s default invocation limit, < LOCK_BUCKET_MS
 const actorKey = (actor) => createHash('sha256').update(actor).digest('hex');
 
 export class Repo {
@@ -13,36 +15,32 @@ export class Repo {
     this.store = store;
   }
 
-  // Installation-wide mutation lease. A Forge function invocation is hard-limited
-  // (25 s by default; this app declares no long-running functions), so a lease
-  // longer than that cannot expire under a still-running owner. A crashed
-  // invocation therefore blocks the gate for at most LOCK_LEASE_MS, not forever.
+  // Installation-wide mutation lease, built only from operations Forge KVS makes atomic.
+  //
+  // An expired-but-unswept KVS key still blocks FAIL_IF_EXISTS for up to 48 h, and KVS has
+  // no conditional delete, so a single lock key can neither expire reliably nor be taken
+  // over safely. Instead each fixed time bucket has its own key:
+  //   1. create this bucket's key with FAIL_IF_EXISTS (same-bucket callers exclude each other);
+  //   2. read the previous and next bucket keys; if either holds a live lease, back off.
+  // Two callers in adjacent buckets each write their own key and then read the other's, so
+  // at least one of them sees the other and backs off. A lease (60 s) outlives any Forge
+  // invocation (25 s) but not a bucket (120 s), so buckets two apart can never overlap.
+  // A crashed caller blocks the gate for at most the rest of its bucket.
   async withMutation(work, nowMs = Date.now()) {
     const owner = globalThis.crypto.randomUUID();
+    const bucket = Math.floor(nowMs / LOCK_BUCKET_MS);
+    const key = `${LOCK_PREFIX}${bucket}`;
     const lease = { owner, expiresAt: nowMs + LOCK_LEASE_MS };
-    let acquired = await this.store.set(LOCK_KEY, lease, { failIfExists: true, ttlSeconds: LOCK_LEASE_MS / 1000 });
-    if (!acquired) {
-      const held = await this.store.get(LOCK_KEY);
-      const ttl = { ttlSeconds: LOCK_LEASE_MS / 1000 };
-      if (!held) {
-        // Lease vanished between our set and get: just retry the conditional set, never delete.
-        acquired = await this.store.set(LOCK_KEY, lease, { failIfExists: true, ...ttl });
-      } else if (!Number.isFinite(held.expiresAt) || held.expiresAt <= nowMs) {
-        // Stale lease. Only the caller that claims this exact lease's takeover marker may
-        // remove it, so two callers that both saw it stale cannot both delete-and-reacquire.
-        const claimed = await this.store.set(`${LOCK_KEY}:takeover:${held.owner ?? 'unknown'}`, owner, { failIfExists: true, ...ttl });
-        if (claimed) {
-          await this.store.delete(LOCK_KEY);
-          acquired = await this.store.set(LOCK_KEY, lease, { failIfExists: true, ...ttl });
-        }
-      }
-    }
-    if (!acquired) throw new GateError('BUSY', 'another gate mutation is in progress; retry in a moment');
+    const busy = () => new GateError('BUSY', 'another gate mutation is in progress; retry in a moment');
+    if (!(await this.store.set(key, lease, { failIfExists: true, ttlSeconds: (2 * LOCK_BUCKET_MS) / 1000 }))) throw busy();
     try {
+      const neighbours = await Promise.all([this.store.get(`${LOCK_PREFIX}${bucket - 1}`), this.store.get(`${LOCK_PREFIX}${bucket + 1}`)]);
+      if (neighbours.some((l) => l && !(Number.isFinite(l.expiresAt) && l.expiresAt <= nowMs))) throw busy();
       return await work();
     } finally {
-      const current = await this.store.get(LOCK_KEY);
-      if (current?.owner === owner) await this.store.delete(LOCK_KEY);
+      // Nobody else can create this key while ours exists, so this only ever removes our lease.
+      const current = await this.store.get(key);
+      if (current?.owner === owner) await this.store.delete(key);
     }
   }
 
@@ -102,6 +100,11 @@ export class Repo {
   }
 
   async saveRequest(req) {
+    // Check the complete value, including resolved Jira fields and JSON escaping.
+    // Character limits alone cannot guarantee the KVS byte limit.
+    if (Buffer.byteLength(JSON.stringify(req), 'utf8') >= 240 * 1024) {
+      throw new GateError('REQUEST_TOO_LARGE', 'approval request must be smaller than 240 KiB; reduce the text or number of issues');
+    }
     await this.store.set(`req:${req.id}`, req);
     // Index of open requests for the approval dashboard.
     const pendingKey = `pending:${req.requester}:${req.fingerprint}`;

@@ -53,7 +53,7 @@ and moves into Done/Closed/Won't Do need approval; 30 attempted targets/user/UTC
 are not refunded on failure or a lost response. Hourly limits are fixed buckets, not rolling windows.
 
 Concurrent mutations return `REFUSED` / `BUSY`. Mutations take one installation-wide storage lease
-(`FAIL_IF_EXISTS`, 120 s, longer than Forge's 25 s invocation limit) so parallel calls cannot race usage,
+(`FAIL_IF_EXISTS` on a per-2-minute bucket key, plus a neighbour-bucket check) so parallel calls cannot race usage,
 human decisions, or policy updates. A crashed invocation blocks mutations for at most about two minutes.
 See `STATUS.md` for the operational limits of this approach.
 

@@ -1,7 +1,7 @@
 // Approval dashboard (Jira global page, UI Kit). Approve/reject agent changes,
 // read the audit log, and (Jira admins) edit the policy or hit the kill switch.
 // Everything on the page comes from ONE resolver call (getDashboard).
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ForgeReconciler, { Box, Button, Heading, Inline, SectionMessage, Spinner, Stack, Tab, TabList, TabPanel, Tabs, Text } from '@forge/react';
 import { invoke } from '@forge/bridge';
 import { countPending } from './format.js';
@@ -15,16 +15,19 @@ function App() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const loadId = useRef(0);
+
   // Refreshes keep the current data on screen; only the first load shows a spinner.
   const load = useCallback(async () => {
+    const id = ++loadId.current;
     setLoading(true);
     try {
-      setData(await invoke('getDashboard'));
-      setError(null);
+      const next = await invoke('getDashboard');
+      if (id === loadId.current) { setData(next); setError(null); }
     } catch (e) {
-      setError(String(e));
+      if (id === loadId.current) setError(String(e));
     } finally {
-      setLoading(false);
+      if (id === loadId.current) setLoading(false);
     }
   }, []);
   useEffect(() => { load(); }, [load]);

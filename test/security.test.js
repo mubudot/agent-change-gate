@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setup, ALICE, BOB } from './helpers.js';
 import { actorFrom, makeHandlers } from '../src/actions.js';
+import { LOCK_BUCKET_MS, LOCK_LEASE_MS } from '../src/store/repo.js';
 
 const comment = { issueKeys: 'DEMO-1', body: 'review fixture' };
 const deferred = () => {
@@ -211,28 +212,55 @@ test('lost Jira response leaves reserved usage and an audit intent', async () =>
   assert.ok((await env.repo.listAudit()).some((entry) => entry.outcome === 'EXECUTION_STARTED'));
 });
 
-test('a live lease blocks; an orphaned lease from a crashed call expires', async () => {
+const T0 = Date.UTC(2026, 10, 2, 9, 0, 0); // setup() clock
+const lockKey = (ms, offset = 0) => `mutation-lock:${Math.floor(ms / LOCK_BUCKET_MS) + offset}`;
+
+test('a crashed lease blocks only until the next lock bucket', async () => {
   const env = await setup();
-  await env.store.set('mutation-lock', { owner: 'crashed', expiresAt: Date.UTC(2026, 10, 2, 9, 0, 0) + 60_000 });
+  // Crashed caller in the current bucket; its key never goes away (KVS may not sweep it for 48 h).
+  await env.store.set(lockKey(T0), { owner: 'crashed', expiresAt: T0 + LOCK_LEASE_MS });
   assert.equal((await env.svc.guardedChange('jira.issue.comment', comment, ALICE)).code, 'BUSY');
   assert.equal(env.writes().length, 0);
-  env.advance(61_000);
+  env.advance(LOCK_BUCKET_MS);
   assert.equal((await env.svc.guardedChange('jira.issue.comment', comment, ALICE)).status, 'EXECUTED');
-  assert.equal(await env.store.get('mutation-lock'), undefined);
+  assert.ok(await env.store.get(lockKey(T0)), 'the crashed key is left alone, never deleted');
 });
 
-test('a legacy lock without expiry is treated as stale', async () => {
+test('a live lease in an adjacent bucket blocks, and the backing-off caller releases its own key', async () => {
+  for (const offset of [-1, 1]) {
+    const env = await setup();
+    await env.store.set(lockKey(T0, offset), { owner: 'other', expiresAt: Number.MAX_SAFE_INTEGER });
+    assert.equal((await env.svc.guardedChange('jira.issue.comment', comment, ALICE)).code, 'BUSY');
+    assert.equal(await env.store.get(lockKey(T0)), undefined);
+    assert.equal(env.writes().length, 0);
+  }
+});
+
+test('an expired lease in the previous bucket and a legacy single lock key do not block', async () => {
   const env = await setup();
+  await env.store.set(lockKey(T0, -1), { owner: 'crashed', expiresAt: T0 - 1 });
   await env.store.set('mutation-lock', { held: true });
   assert.equal((await env.svc.guardedChange('jira.issue.comment', comment, ALICE)).status, 'EXECUTED');
 });
 
-test('release never deletes a lease taken over by someone else', async () => {
+test('release never deletes a lease that is not ours', async () => {
   const env = await setup();
   await env.repo.withMutation(async () => {
-    await env.store.set('mutation-lock', { owner: 'other', expiresAt: Number.MAX_SAFE_INTEGER });
+    await env.store.set(lockKey(0), { owner: 'other', expiresAt: Number.MAX_SAFE_INTEGER });
   }, 0);
-  assert.equal((await env.store.get('mutation-lock')).owner, 'other');
+  assert.equal((await env.store.get(lockKey(0))).owner, 'other');
+});
+
+test('callers straddling a bucket boundary never both run', async () => {
+  const env = await setup();
+  const entered = deferred();
+  const release = deferred();
+  const late = LOCK_BUCKET_MS * 10 - 1; // last millisecond of a bucket
+  const first = env.repo.withMutation(async () => { entered.resolve(); await release.promise; }, late);
+  await entered.promise;
+  await assert.rejects(env.repo.withMutation(async () => assert.fail('second caller ran'), late + 2), /another gate mutation/);
+  release.resolve();
+  await first;
 });
 
 test('Forge function context.principal.accountId is the acting user', async () => {
@@ -243,18 +271,3 @@ test('Forge function context.principal.accountId is the acting user', async () =
   assert.equal((await h.commentIssues(comment, { principal: { accountId: ALICE } })).status, 'EXECUTED');
 });
 
-test('two callers that both see the same stale lease cannot both take it over', async () => {
-  const env = await setup();
-  await env.store.set('mutation-lock', { owner: 'dead', expiresAt: 0 });
-  const entered = deferred();
-  const release = deferred();
-  const first = env.repo.withMutation(async () => { entered.resolve(); await release.promise; }, 1_000);
-  await entered.promise;
-  // Second caller re-reads a stale lease written by the same dead owner (simulating it read before the takeover).
-  const realGet = env.store.get.bind(env.store);
-  env.store.get = async (key) => (key === 'mutation-lock' ? { owner: 'dead', expiresAt: 0 } : realGet(key));
-  await assert.rejects(env.repo.withMutation(async () => assert.fail('second caller ran'), 1_000), /another gate mutation/);
-  env.store.get = realGet;
-  release.resolve();
-  await first;
-});

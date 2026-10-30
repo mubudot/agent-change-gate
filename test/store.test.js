@@ -52,7 +52,8 @@ test('single-use claims never expire; the mutation lock is a bounded lease', asy
   for (const call of calls) assert.deepEqual(call[2], { failIfExists: true });
   calls.length = 0;
   await repo.withMutation(async () => {});
-  assert.deepEqual(calls[0][2], { failIfExists: true, ttlSeconds: 120 });
+  assert.deepEqual(calls[0][2], { failIfExists: true, ttlSeconds: 240 });
+  assert.match(calls[0][0], /^mutation-lock:\d+$/);
 });
 
 test('expired requests and other actors do not starve visible requests beyond the first page', async () => {
@@ -103,4 +104,27 @@ test('KVS FAIL_IF_EXISTS conflicts are read from the SDK error shape', async () 
   const store = new KvsStore({ set: async () => { throw err; } }, {});
   assert.equal(await store.set('k', 1, { failIfExists: true }), false);
   await assert.rejects(store.set('k', 1), /boom/);
+});
+
+
+test('complete approval byte limit includes escaped text and all 200 resolved targets', async () => {
+  const store = new MemoryStore();
+  const repo = new Repo(store);
+  const req = request('id-000001', 0);
+  req.op = {
+    kind: 'jira.issue.comment',
+    payload: { body: '\u0001'.repeat(32000) },
+    targets: Array.from({ length: 200 }, (_, i) => ({
+      issueKey: `ABCDEFGHIJ-${1000000000 + i}`, projectKey: 'ABCDEFGHIJ',
+      issueId: String(10000 + i), projectId: '10000', currentStatus: '界'.repeat(255),
+    })),
+  };
+  assert.ok(Buffer.byteLength(JSON.stringify(req)) > 240 * 1024);
+  await assert.rejects(repo.saveRequest(req), { code: 'REQUEST_TOO_LARGE' });
+  assert.equal(await store.get(`req:${req.id}`), undefined);
+  assert.equal(await store.get(`open:${req.id}`), undefined);
+  req.op.payload.body = '界'.repeat(32000);
+  req.op.targets.forEach((t) => { t.currentStatus = 'To Do'; });
+  await repo.saveRequest(req);
+  assert.ok(Buffer.byteLength(JSON.stringify(await repo.getRequest(req.id))) < 240 * 1024);
 });

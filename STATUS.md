@@ -23,10 +23,14 @@ They do not execute the Forge runtime or mount UI Kit. The Forge dependencies ar
 
 ## Remaining limits
 
-- **P2 — availability (changed after review):** the installation-wide `mutation-lock` is now a 120 s lease
-  (owner token + expiry, KVS TTL as backup). Forge invocations are capped at 25 s by default and this app declares
-  no long-running functions, so a lease cannot expire under a live owner; a crashed invocation blocks gate mutations
-  for at most ~2 minutes instead of until manual cleanup. Release only deletes the caller's own lease. Contention
+- **P2 — availability (changed after review):** the installation-wide lock is a 60 s owner-token lease stored
+  under one key per 120 s time bucket (`mutation-lock:<bucket>`). A caller creates its bucket key with
+  `FAIL_IF_EXISTS`, then backs off if the previous or next bucket holds a live lease. Reason: the Forge Storage team
+  confirmed an expired-but-unswept KVS key still blocks `FAIL_IF_EXISTS` (sweeps take up to 48 h) and KVS has no
+  conditional delete, so a single key can neither expire reliably nor be taken over safely. A crashed invocation
+  blocks gate mutations for at most the rest of its bucket (≤ 2 min); stale keys are never deleted, only ignored.
+  Relies on KVS read-after-write consistency and roughly synchronised server clocks. Release only deletes the
+  caller's own lease. Contention
   still returns `REFUSED/BUSY` (serialises all agent writes per site — fine for a hackathon, a scaling limit later).
   An `EXECUTING` request with a claim is never retried: inspect Jira and request a new approval for remaining work.
   Do not delete single-use claim keys. Verify the lease reasoning against the real invocation limit on a site.
@@ -76,6 +80,12 @@ They do not execute the Forge runtime or mount UI Kit. The Forge dependencies ar
   parallel, then requests/audit/usage in parallel (2 stages instead of 6 sequential round-trips) and calls
   `mypermissions` once instead of twice. Known remaining cost: `listOpenRequests` fetches each open request by id
   (parallel per page of 50) because the `open:` index stores only `createdAt`.
+- Final Codex pass (work/codex_codegeist_final.md) fixes: approval requests are size-checked on the full serialized
+  UTF-8 value before KVS writes (32k escaped text + 200 resolved targets could exceed 240 KiB); more field length
+  bounds; policy editor no longer silently overwrites a newer stored policy (conflict warning, save disabled until
+  discard); stale overlapping reloads ignored; double submits blocked in review and policy save; MemoryStore models
+  TTL. Its lock change (TTL-only, no takeover) was replaced by the bucketed lease above because unswept keys block
+  `FAIL_IF_EXISTS` for up to 48 h.
 - Still to confirm by loading the page: dashboard renders and `getDashboard` succeeds in `forge logs`.
 
 ## Verify on a real site

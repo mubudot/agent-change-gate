@@ -1,5 +1,5 @@
 // Policy tab: readable summary for everyone, JSON editor and kill switch for Jira admins.
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Button, Heading, Inline, Lozenge, SectionMessage, Stack, Tag, TagGroup, Text, TextArea, User, UserGroup } from '@forge/react';
 import { invoke } from '@forge/bridge';
 import { Card, Feedback, Section, resultMessage } from './ui.jsx';
@@ -45,27 +45,45 @@ function PolicySummary({ policy }) {
 }
 
 export function PolicyPanel({ data, reload }) {
-  const [text, setText] = useState(() => JSON.stringify(data.policy, null, 2));
+  const policyJson = JSON.stringify(data.policy, null, 2);
+  const [text, setText] = useState(policyJson);
+  const [base, setBase] = useState(policyJson);
+  const inFlight = useRef(false);
+  const observedPolicy = useRef(policyJson);
+  const conflict = base !== policyJson;
+  useEffect(() => {
+    if (observedPolicy.current !== policyJson) {
+      if (text === base) { setText(policyJson); setBase(policyJson); }
+      observedPolicy.current = policyJson;
+    }
+  }, [policyJson, text, base]);
   const [message, setMessage] = useState(null);
   const [saving, setSaving] = useState(false);
   const paused = data.policy.agentWritesPaused;
 
   const save = async (policy, okText) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setSaving(true);
     setMessage(null);
     try {
       const r = await invoke('savePolicy', { policy });
       setMessage(resultMessage(r, () => okText));
-      if (r?.status === 'OK') setText(JSON.stringify(r.policy, null, 2));
+      if (r?.status === 'OK') {
+        const saved = JSON.stringify(r.policy, null, 2);
+        setText(saved); setBase(saved);
+      }
     } catch (e) {
       setMessage({ tone: 'error', text: `Could not save the policy: ${String(e)}` });
     } finally {
+      await reload();
+      inFlight.current = false;
       setSaving(false);
-      reload();
     }
   };
 
   const saveJson = () => {
+    if (conflict || inFlight.current) return;
     let policy;
     try {
       policy = JSON.parse(text);
@@ -106,11 +124,14 @@ export function PolicyPanel({ data, reload }) {
       <PolicySummary policy={data.policy} />
       <Stack space="space.100">
         <Heading size="small">Policy JSON</Heading>
-        <TextArea value={text} onChange={(e) => setText(e.target.value)} isReadOnly={!data.isAdmin} isMonospaced resize="vertical" minimumRows={12} />
+        {conflict && text !== base && (
+          <SectionMessage appearance="warning"><Text>The policy changed since you started editing. Discard edits to load the current rules before saving.</Text></SectionMessage>
+        )}
+        <TextArea value={text} isDisabled={saving} onChange={(e) => setText(e.target.value)} isReadOnly={!data.isAdmin} isMonospaced resize="vertical" minimumRows={12} />
         {data.isAdmin ? (
           <Inline space="space.100">
-            <Button appearance="primary" isDisabled={saving} onClick={saveJson}>Save policy</Button>
-            <Button appearance="subtle" isDisabled={saving} onClick={() => { setText(JSON.stringify(data.policy, null, 2)); setMessage(null); }}>Discard edits</Button>
+            <Button appearance="primary" isDisabled={saving || conflict} onClick={saveJson}>Save policy</Button>
+            <Button appearance="subtle" isDisabled={saving} onClick={() => { setText(policyJson); setBase(policyJson); setMessage(null); }}>Discard edits</Button>
           </Inline>
         ) : (
           <Text>Only Jira administrators can change the policy.</Text>

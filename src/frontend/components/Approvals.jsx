@@ -1,5 +1,5 @@
 // Approvals tab: pending agent changes, with a review dialog that shows the exact payload.
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Button,
   CodeBlock,
@@ -38,27 +38,31 @@ const HEAD = {
 function ReviewModal({ request, data, onClose, onDecided }) {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
   const [message, setMessage] = useState(null);
   const ownRequest = data.policy.requireDistinctApprover && request.requester === data.actor;
   const canDecide = data.isApprover && request.status === 'PENDING';
 
   const decide = async (approve) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setMessage(null);
     try {
       const r = await invoke('decide', { approvalId: request.id, approve, note: note.trim() || undefined });
       const msg = resultMessage(r, (res) => `Request ${String(res.approvalStatus ?? '').toLowerCase()}.`);
-      if (r?.status === 'OK') onDecided(msg);
+      if (r?.status === 'OK') await onDecided(msg);
       else setMessage(msg);
     } catch (e) {
       setMessage({ tone: 'error', text: `Could not record the decision: ${String(e)}` });
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   };
 
   return (
-    <Modal onClose={onClose} width="large">
+    <Modal onClose={() => { if (!inFlight.current) onClose(); }} width="large">
       <ModalHeader>
         <ModalTitle>{`${operationLabel(request.op.kind)} · ${targetList(request.op.targets)}`}</ModalTitle>
       </ModalHeader>
@@ -86,7 +90,7 @@ function ReviewModal({ request, data, onClose, onDecided }) {
         </Stack>
       </ModalBody>
       <ModalFooter>
-        <Button appearance="subtle" onClick={onClose}>Close</Button>
+        <Button appearance="subtle" isDisabled={busy} onClick={onClose}>Close</Button>
         {canDecide && (
           <>
             <Button appearance="danger" isDisabled={busy} onClick={() => decide(false)}>Reject</Button>
@@ -101,6 +105,7 @@ function ReviewModal({ request, data, onClose, onDecided }) {
 export function Approvals({ data, loading, reload }) {
   const [reviewing, setReviewing] = useState(null);
   const [message, setMessage] = useState(null);
+  const request = data.requests.find((r) => r.id === reviewing);
   const now = Date.now();
 
   const rows = data.requests.map((r) => ({
@@ -115,7 +120,7 @@ export function Approvals({ data, loading, reload }) {
       {
         key: 'action',
         content: (
-          <Button appearance={data.isApprover && r.status === 'PENDING' ? 'primary' : 'default'} onClick={() => setReviewing(r)}>
+          <Button isDisabled={loading} appearance={data.isApprover && r.status === 'PENDING' ? 'primary' : 'default'} onClick={() => setReviewing(r.id)}>
             {data.isApprover && r.status === 'PENDING' ? 'Review' : 'View'}
           </Button>
         ),
@@ -139,12 +144,13 @@ export function Approvals({ data, loading, reload }) {
         <DynamicTable head={HEAD} rows={rows} rowsPerPage={10} isLoading={loading} />
       )}
       <ModalTransition>
-        {reviewing && (
+        {request && (
           <ReviewModal
-            request={reviewing}
+            key={request.id}
+            request={request}
             data={data}
             onClose={() => setReviewing(null)}
-            onDecided={(msg) => { setReviewing(null); setMessage(msg); reload(); }}
+            onDecided={async (msg) => { setReviewing(null); setMessage(msg); await reload(); }}
           />
         )}
       </ModalTransition>

@@ -64,10 +64,10 @@ export function fakeJira({ admins = [BOB], issues } = {}) {
 }
 
 export async function setup({ policy = {}, admins } = {}) {
-  const store = new MemoryStore();
+  let t = Date.UTC(2026, 10, 2, 9, 0, 0);
+  const store = new MemoryStore(() => t);
   const repo = new Repo(store);
   const jira = fakeJira({ admins });
-  let t = Date.UTC(2026, 10, 2, 9, 0, 0);
   let n = 0;
   const svc = new GateService({
     repo,

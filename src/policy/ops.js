@@ -7,7 +7,7 @@ const ACCOUNT_ID = /^[A-Za-z0-9:_-]{1,128}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const LABEL = /^[^\s]{1,255}$/;
 const MAX_KEYS_PARSED = 200; // hard parser ceiling, independent of policy
-// Text ceilings keep a stored approval request far below the 240 KiB Forge KVS value limit.
+// Bound user input; Repo also checks the complete serialized approval request.
 const MAX_TEXT = 32000;
 const MAX_LABELS = 50;
 
@@ -69,6 +69,7 @@ export function buildOperation(kind, input = {}) {
       const keys = parseIssueKeys(input.issueKeys, errors);
       const to = str(input.toStatus);
       if (!to) errors.push('toStatus is required');
+      else if (to.length > 255) errors.push('toStatus must be at most 255 characters');
       op = { kind, targets: targetsFromKeys(keys), payload: { toStatus: to }, fields: [], toStatus: to };
       break;
     }
@@ -92,7 +93,10 @@ export function buildOperation(kind, input = {}) {
         changes.summary = summary;
       }
       const priority = str(input.priority);
-      if (priority !== undefined) changes.priority = priority;
+      if (priority !== undefined) {
+        if (priority.length > 255) errors.push('priority must be at most 255 characters');
+        changes.priority = priority;
+      }
       const due = str(input.dueDate);
       if (due !== undefined) {
         if (!DATE.test(due)) errors.push('dueDate must be YYYY-MM-DD');
@@ -113,6 +117,7 @@ export function buildOperation(kind, input = {}) {
       const projectKey = str(input.projectKey)?.toUpperCase();
       if (!projectKey || !PROJECT_KEY.test(projectKey)) errors.push('projectKey is required and must be a valid project key');
       const issueType = str(input.issueType) ?? 'Task';
+      if (issueType.length > 255) errors.push('issueType must be at most 255 characters');
       const summary = str(input.summary);
       if (!summary) errors.push('summary is required');
       else if (summary.length > 255) errors.push('summary must be at most 255 characters');

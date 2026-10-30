@@ -202,3 +202,19 @@ test('dashboard makes a single Jira permission call and returns the full page in
   assert.equal(after - before, 1);
   for (const k of ['actor', 'isApprover', 'isAdmin', 'policy', 'policyErrors', 'requests', 'audit', 'siteUsageToday']) assert.ok(k in d, k);
 });
+
+
+test('dashboard preserves explicit approver semantics even for Jira administrators', async () => {
+  const env = await setup({ policy: { approvers: [ALICE] } });
+  env.as(BOB);
+  const admin = await env.svc.dashboard(BOB);
+  assert.equal(admin.isAdmin, true);
+  assert.equal(admin.isApprover, false);
+  env.as(ALICE);
+  const approver = await env.svc.dashboard(ALICE);
+  assert.equal(approver.isAdmin, false);
+  assert.equal(approver.isApprover, true);
+  assert.deepEqual(Object.keys(approver).sort(), [
+    'actor', 'isApprover', 'isAdmin', 'policy', 'policyErrors', 'requests', 'audit', 'siteUsageToday',
+  ].sort());
+});
