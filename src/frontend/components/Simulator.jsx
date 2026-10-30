@@ -14,7 +14,7 @@ const RULE_PRESETS = [
 
 // The pair that shows context-aware gating: identical command, different issue context.
 const CONTEXT_PRESETS = [
-  { id: 'routine-move', label: 'Move to In Review', expect: 'Issue with no links: allowed' },
+  { id: 'routine-move', label: 'Move to In Progress', expect: 'Issue with no links: allowed' },
   { id: 'context-move', label: 'Same move, issue ships this week', expect: 'Release in 3 days + goal: needs approval' },
 ];
 
@@ -115,7 +115,7 @@ export function Simulator({ data, reload }) {
         <PresetRow title="Policy rules" presets={RULE_PRESETS} busy={busy} onRun={(id) => call('simulate', { preset: id, ...(key ? { issueKey: key } : {}) })} />
         <PresetRow
           title="Same command, different context"
-          hint={key ? `Live: the gate reads ${key.toUpperCase()}'s real Jira and Teamwork Graph context.` : 'Dry run: the second issue gets a synthetic release and goal.'}
+          hint={key ? `Live: the gate reads ${key.toUpperCase()}'s real Jira and Teamwork Graph context.` : 'Dry run: on the second button the synthetic issue ships in 3 days and is linked to a goal.'}
           presets={CONTEXT_PRESETS}
           busy={busy}
           onRun={(id) => call('simulate', { preset: id, ...(key ? { issueKey: key } : {}) })}

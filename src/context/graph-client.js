@@ -13,6 +13,16 @@
 const ISSUE_ID = /^[1-9][0-9]*$/;
 const CLOUD_ID = /^[0-9a-fA-F-]{8,64}$/;
 const PAGE = 25; // curated queries cap `first` at 25
+// Forge gives UI resolvers 25 s and actions 55 s; a stalled graph read must become a gap, not a timeout.
+export const GRAPH_TIMEOUT_MS = 8000;
+export const PING_TIMEOUT_MS = 4000;
+
+/** Resolve with the promise, or reject after ms. */
+export function withDeadline(promise, ms, what) {
+  let timer;
+  const deadline = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${what} timed out after ${ms} ms`)), ms); });
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
+}
 
 export const FAMILIES = Object.freeze({
   goals: {
@@ -65,9 +75,11 @@ export function buildFamilyQuery(familyKey, cloudId, issueIds) {
 
 export class TeamworkGraphClient {
   /** @param {(query:string, variables?:object) => Promise<{status:number, data:any}>} request */
-  constructor(request, cloudId) {
+  constructor(request, cloudId, { timeoutMs = GRAPH_TIMEOUT_MS, pingTimeoutMs = PING_TIMEOUT_MS } = {}) {
     this.request = request;
     this.cloudId = cloudId;
+    this.timeoutMs = timeoutMs;
+    this.pingTimeoutMs = pingTimeoutMs;
   }
 
   get available() {
@@ -78,7 +90,7 @@ export class TeamworkGraphClient {
   async ping() {
     if (!this.available) return { ok: false, error: 'no site id in the Forge context' };
     try {
-      const r = await this.request('query agentChangeGate_ping { echo(myString: "ok") }', {});
+      const r = await withDeadline(this.request('query agentChangeGate_ping { echo(myString: "ok") }', {}), this.pingTimeoutMs, 'Teamwork Graph ping');
       const ok = r.status >= 200 && r.status < 300 && r.data?.data?.echo === 'ok';
       return ok ? { ok: true } : { ok: false, error: graphError(r) };
     } catch (e) {
@@ -102,7 +114,7 @@ export class TeamworkGraphClient {
         const { query, variables } = buildFamilyQuery(fam, this.cloudId, ids);
         let r;
         try {
-          r = await this.request(query, variables);
+          r = await withDeadline(this.request(query, variables), this.timeoutMs, 'request');
         } catch (e) {
           errors.push(`Teamwork Graph ${fam}: ${String(e?.message ?? e).slice(0, 200)}`);
           return;

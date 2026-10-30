@@ -25,9 +25,9 @@ export const PRESETS = Object.freeze({
     }),
   },
   'routine-move': {
-    label: 'Routine move to In Review',
+    label: 'Routine move to In Progress',
     expect: 'ALLOW',
-    build: ({ keys }) => ({ kind: 'jira.issue.transition', input: { issueKeys: keys(1).join(','), toStatus: 'In Review' } }),
+    build: ({ keys }) => ({ kind: 'jira.issue.transition', input: { issueKeys: keys(1).join(','), toStatus: 'In Progress' } }),
   },
   // Same command as routine-move. In a dry run the synthetic issue is wired to a release due in
   // 3 days and a company goal, so the gate's context check (not the command) changes the verdict.
@@ -35,7 +35,7 @@ export const PRESETS = Object.freeze({
   'context-move': {
     label: 'Same move, issue ships this week',
     expect: 'NEEDS_APPROVAL',
-    build: ({ keys }) => ({ kind: 'jira.issue.transition', input: { issueKeys: keys(1).join(','), toStatus: 'In Review' } }),
+    build: ({ keys }) => ({ kind: 'jira.issue.transition', input: { issueKeys: keys(1).join(','), toStatus: 'In Progress' } }),
     syntheticContext: (now) => ({
       fixVersions: [{ name: 'Mobile 2.4', released: false, releaseDate: isoDay(now + 3 * 86_400_000) }],
       goals: [{ name: 'Launch mobile checkout in Q4', archived: false }],

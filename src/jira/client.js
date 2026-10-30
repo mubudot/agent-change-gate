@@ -95,7 +95,6 @@ export class JiraClient {
 
 /** Context facts from an issue's fields. Absent fields simply yield no facts. */
 // Every returned entry is evaluated (no truncation before the gate sees it); only display text is capped.
-const MAX_FACTS = 1000;
 export function issueFacts(fields) {
   if (!fields || typeof fields !== 'object') return null; // malformed response: collector reports a required gap
   const versions = Array.isArray(fields.fixVersions) ? fields.fixVersions : [];
@@ -104,7 +103,7 @@ export function issueFacts(fields) {
   const missing = ['fixVersions', 'priority', 'issuelinks'].filter((f) => !(f in fields));
   return {
     missing,
-    fixVersions: versions.slice(0, MAX_FACTS).map((v) => ({
+    fixVersions: versions.map((v) => ({
       name: String(v?.name ?? '').slice(0, 200),
       released: v?.released === true,
       releaseDate: typeof v?.releaseDate === 'string' ? v.releaseDate : null,
@@ -113,7 +112,6 @@ export function issueFacts(fields) {
     // Outward "blocks" links only: this issue blocks those issues.
     blocks: links
       .filter((l) => String(l?.type?.outward ?? '').toLowerCase() === 'blocks' && l?.outwardIssue?.key)
-      .slice(0, MAX_FACTS)
       .map((l) => ({ key: String(l.outwardIssue.key), done: l.outwardIssue.fields?.status?.statusCategory?.key === 'done' })),
   };
 }

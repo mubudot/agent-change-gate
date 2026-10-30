@@ -346,3 +346,43 @@ test('graph results with more pages are reported as a gap (and escalate when pol
   assert.equal(r.status, 'PENDING_APPROVAL');
   assert.match(r.reasons[0].message, /more than 25 linked pullRequests/);
 });
+
+// ---------- review fixes (Codex round 2) ----------
+
+test('outage tolerance needs reviewed graph context: Jira-only approvals refuse a later graph outage', async () => {
+  const graph = fakeGraph({}, { fail: true }); // graph down at request time: only Jira context reviewed
+  const env = await contextEnv({ graph });
+  const r = await env.svc.guardedChange('jira.issue.transition', { issueKeys: 'DEMO-2', toStatus: 'In Progress' }, ALICE);
+  assert.equal(r.status, 'PENDING_APPROVAL');
+  env.as(BOB);
+  await env.svc.decideRequest(r.approvalId, true, undefined, BOB);
+  await env.svc.savePolicy({ allowedProjects: ['DEMO'], requireDistinctApprover: false, contextRisk: { onGraphUnavailable: 'approve' } }, BOB);
+  env.as(ALICE);
+  const run = await env.svc.runApproved(r.approvalId, ALICE);
+  assert.equal(run.code, 'NEW_RISK');
+  assert.deepEqual(run.reasons.map((x) => x.code), ['CONTEXT_UNAVAILABLE']);
+});
+
+test('every Jira fact is evaluated: the only open blocked issue sits after 1,000 done ones', () => {
+  const links = Array.from({ length: 1000 }, (_, i) => ({ type: { outward: 'blocks' }, outwardIssue: { key: `D-${i + 1}`, fields: { status: { statusCategory: { key: 'done' } } } } }));
+  links.push({ type: { outward: 'blocks' }, outwardIssue: { key: 'D-1001', fields: { status: { statusCategory: { key: 'new' } } } } });
+  const versions = Array.from({ length: 1000 }, () => ({ name: 'old', released: true, releaseDate: '2026-01-01' }));
+  versions.push({ name: 'R1001', released: false, releaseDate: '2026-11-04' });
+  const sigs = jiraSignals('A-1', issueFacts({ issuelinks: links, fixVersions: versions }), CFG, NOW);
+  assert.deepEqual(sigs.map((x) => x.signal), ['RELEASE_SOON', 'BLOCKS_OPEN_WORK']);
+  assert.deepEqual(sigs[1].detail.blocks, ['D-1001']);
+});
+
+test('a stalled Teamwork Graph becomes a gap within the deadline, and ping is bounded', async () => {
+  const stall = () => new Promise(() => {});
+  const graph = new TeamworkGraphClient(stall, CLOUD, { timeoutMs: 30, pingTimeoutMs: 30 });
+  const res = await graph.workItemContext(['1']);
+  assert.equal(res.errors.length, 3);
+  assert.match(res.errors[0], /timed out/);
+  assert.match((await graph.ping()).error, /timed out/);
+});
+
+test('dashboard does not report graph status when the policy does not use it', async () => {
+  const env = await contextEnv({ policy: { contextRisk: { useTeamworkGraph: false } } });
+  assert.equal((await env.svc.dashboard(ALICE)).graphStatus.ok, false);
+});

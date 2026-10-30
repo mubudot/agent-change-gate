@@ -299,11 +299,14 @@ export class GateService {
     // Page-load latency: two parallel stages instead of six sequential round-trips, and one
     // Jira permission call (isApprover reuses the admin answer when no approvers are listed).
     const now = this.now();
-    const [{ policy, errors }, isAdmin, graphStatus] = await Promise.all([
+    const graphWanted = (policy) => policy.contextRisk.enabled && policy.contextRisk.useTeamworkGraph;
+    const [{ policy, errors }, isAdmin, ping] = await Promise.all([
       this.repo.loadPolicy(),
       this.jira.isJiraAdmin(),
+      // Started in parallel for latency; bounded by the graph client's own deadline.
       this.graph ? this.graph.ping() : { ok: false, error: 'not configured' },
     ]);
+    const graphStatus = graphWanted(policy) ? ping : { ok: false, error: 'not used by the current policy' };
     const approver = policy.approvers.length ? policy.approvers.includes(actor) : isAdmin;
     const seesAll = approver || isAdmin;
     const [requests, audit, usage, simulations] = await Promise.all([
@@ -432,11 +435,13 @@ function sameOrigin(req, origin) {
 function newRisksSince(stored, reasons, context) {
   const approvedCodes = new Set(stored.reasons.map((r) => r.code));
   const reviewed = stored.context ? new Set((stored.context.signals ?? []).map(signalKey)) : null;
+  // Outage tolerance only where the approver actually reviewed Teamwork Graph context.
+  const graphReviewed = (stored.context?.sources ?? []).some((s) => s === 'teamwork-graph' || s === 'simulated');
   const out = [];
   for (const r of reasons) {
     if (RATE_CODES.has(r.code)) continue;
     if (r.code === 'CONTEXT_UNAVAILABLE') {
-      if (!reviewed && !approvedCodes.has(r.code)) out.push(r);
+      if (!graphReviewed && !approvedCodes.has(r.code)) out.push(r);
       continue;
     }
     if (!r.code.startsWith('CONTEXT_')) {

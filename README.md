@@ -68,7 +68,7 @@ resolves it, and each signal can only **raise** the verdict (policy `contextRisk
 ```bash
 node --version   # tests require Node >= 22; the Forge CLI may require a newer patch
 npm ci
-node --test test/*.test.js        # 141 tests, no Atlassian account or network needed
+node --test test/*.test.js        # 145 tests, no Atlassian account or network needed
 # optional: validate manifest.yml against the schema bundled with a local Forge CLI checkout
 # (npm i -g @forge/cli, then point FORGE_CLI_DIR at its install directory)
 FORGE_CLI_DIR=<path-to-@forge/cli> node scripts/validate-manifest.cjs
@@ -111,7 +111,7 @@ decides the verdict from the current policy.
 | Low-risk comment | comment on one issue | ALLOW: runs at once |
 | Move to protected status | transition one issue into the first protected status (Done) | NEEDS APPROVAL (`PROTECTED_STATUS`) |
 | Runaway bulk close | transition `maxTargetsPerCall + 1` issues | DENY (`TOO_MANY_TARGETS`), before any issue is read |
-| Move to In Review | transition one issue with no links | ALLOW |
+| Move to In Progress | transition one issue with no links | ALLOW |
 | Same move, issue ships this week | the identical transition; in a dry run the synthetic issue is in a release due in 3 days and linked to a goal | NEEDS APPROVAL (`CONTEXT_RELEASE_SOON`, `CONTEXT_LINKED_GOAL`) |
 
 - Leave **Issue key** empty for a **dry run**: the request uses synthetic issues (`<first allowed project>-9001…`)
@@ -127,7 +127,7 @@ decides the verdict from the current policy.
   requests, from the page or through `run-approved-change`.
 
 **With Rovo:** open Rovo chat → pick **Change Gate Agent** → e.g. *"What could go wrong if you move KAN-2?"*
-(issue-context), *"Move KAN-1 to In Review"* (runs) vs *"Move KAN-2 to In Review"* where KAN-2 has a fix version
+(issue-context), *"Move KAN-1 to In Progress"* (runs) vs *"Move KAN-2 to In Progress"* where KAN-2 has a fix version
 due this week (PENDING_APPROVAL with `CONTEXT_RELEASE_SOON`), *"Comment 'ready for review' on KAN-1"* (runs),
 *"Move KAN-1 to Done"* (returns PENDING_APPROVAL; approve it on the page, then ask the agent to run the approved
 change), *"Close these 25 issues"* (denied). Audit entries show **Source: Agent**.
