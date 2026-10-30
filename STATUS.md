@@ -65,6 +65,17 @@ They do not execute the Forge runtime or mount UI Kit. The Forge dependencies ar
   takeover is claimed per dead lease so two callers cannot both delete-and-reacquire; KVS conflicts read
   `err.responseDetails.status`; comment/description/label sizes bounded below the 240 KiB KVS value limit; policy
   save shows transport errors and disables its buttons while saving.
+- UI polish (a7e31e4, development v2.5.0): UI Kit only. Summary cards (Badge counts, Lozenge state), approvals
+  and audit DynamicTables with clear columns, `User` avatars and locale timestamps plus relative time, a review
+  Modal with the exact untruncated payload (CodeBlock) and Approve (primary) / Reject (danger) + optional note,
+  SectionMessage empty/error states, Spinner on first load, background refresh keeps data visible. UI Kit `Tab`
+  labels must be plain strings, so the pending count is in the label text and Badges sit on the summary cards.
+  Components: `src/frontend/components/{Summary,Approvals,AuditLog,PolicyPanel,ui}.jsx`, helpers in
+  `src/frontend/format.js` (unit-tested).
+- Page speed: still one resolver call per load (`getDashboard`). `dashboard()` now does policy+Jira admin check in
+  parallel, then requests/audit/usage in parallel (2 stages instead of 6 sequential round-trips) and calls
+  `mypermissions` once instead of twice. Known remaining cost: `listOpenRequests` fetches each open request by id
+  (parallel per page of 50) because the `open:` index stores only `createdAt`.
 - Still to confirm by loading the page: dashboard renders and `getDashboard` succeeds in `forge logs`.
 
 ## Verify on a real site
