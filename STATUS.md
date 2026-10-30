@@ -21,7 +21,7 @@ not yet verified from a Rovo chat or an external MCP client.
 Local checks: **118 tests passing** (as of 2026-10-31) with `node --test test/*.test.js` on Node 22.23.3;
 `FORGE_CLI_DIR=../work/forge-cli node scripts/validate-manifest.cjs` passes against the bundled CLI schema.
 Unit tests exercise pure policy, approval flows, deterministic races, storage failures, Jira routing and SDK-adapter contracts.
-They do not execute the Forge runtime or mount UI Kit. The Forge dependencies are not installed in this checkout.
+They do not execute the Forge runtime or mount UI Kit; the Forge runtime was exercised separately by the development deploys (see Live site notes).
 
 ## Remaining limits
 
@@ -117,8 +117,7 @@ They do not execute the Forge runtime or mount UI Kit. The Forge dependencies ar
   storage errors propagate without granting a write. The adapter's conflict recognition remains to be confirmed.
 - KVS point-read/conditional-write behavior across separate invocations, `WhereConditions.beginsWith`, cursor pages,
   TTL behavior and the operator recovery procedure. SDK doubles are contract tests, not live evidence.
-- Full Forge dependency installation and bundling with root `"type": "module"`, `.js` import extensions,
-  `node:crypto`, `@forge/resolver` default import, Node 24 runtime and arm64. Schema validation cannot prove bundler compatibility.
+- (Done since: dependencies installed, `forge lint` clean, bundled and deployed to development; `@forge/resolver` switched to named imports.)
 - UI Kit exports/props (`TextArea`, `DynamicTable`, `Lozenge`, `Tabs`, `SectionMessage`, `Button`), native resource
   compilation, `@forge/bridge` invokes, full payload readability and transport-error behavior.
 - End to end with two accounts: allow/deny/preview, protected transitions, approve/reject, self-approval refusal,

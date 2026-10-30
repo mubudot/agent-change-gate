@@ -32,8 +32,11 @@ Built for Codegeist 2026 (Apps for Software Teams; bonus: Rovo Agents, Atlassian
 
 ```bash
 node --version   # tests require Node >= 22; the Forge CLI may require a newer patch
-node --test test/*.test.js
-FORGE_CLI_DIR=../work/forge-cli node scripts/validate-manifest.cjs
+npm ci
+node --test test/*.test.js        # 118 tests, no Atlassian account or network needed
+# optional: validate manifest.yml against the schema bundled with a local Forge CLI checkout
+# (npm i -g @forge/cli, then point FORGE_CLI_DIR at its install directory)
+FORGE_CLI_DIR=<path-to-@forge/cli> node scripts/validate-manifest.cjs
 ```
 
 ## Deploy (needs an Atlassian account; Rovo is optional, see below)
@@ -105,7 +108,8 @@ See `STATUS.md` for the operational limits of this approach.
 
 ## Built with
 
-Forge (UI Kit, KVS, Rovo modules), Jira REST v3, Node.js `node:test`. Developed with AI coding assistance;
+Forge (UI Kit, KVS, Rovo modules), Jira REST v3, Node.js `node:test`. Libraries: `@forge/api`, `@forge/bridge`,
+`@forge/kvs`, `@forge/react`, `@forge/resolver`, `react` 18. Developed with AI coding assistance;
 local unit and flow tests cover the gate and adapters, with Forge runtime checks still pending.
 
 MIT licence.

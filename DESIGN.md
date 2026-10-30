@@ -144,8 +144,8 @@ Without Rovo, steps 2–4 can be shown with the *Simulate an agent request* pane
 
 ## Next steps
 
-- Login-dependent: `forge register`, `forge deploy`, `forge install` on a dev site with Rovo enabled; verify
-  action payload/context shape, `asUser()` inside actions, KVS `FAIL_IF_EXISTS` error code, UI Kit rendering.
+- Done: `forge register`, `forge deploy` (development) and `forge install` on a test site; UI Kit page renders.
+  Still open: run the Rovo agent / MCP tools from a Rovo chat and an MCP client; production deploy + sharing link for judges.
 - Confluence guarded writes (needs multi-app compatibility config, Preview).
 - Teamwork Graph enrichment of approval cards (bonus stretch).
 - Notify approvers (Jira comment on the issue or email) when a request is queued.
