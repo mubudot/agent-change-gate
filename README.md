@@ -12,12 +12,15 @@ and human approval (two-person rule, single-use, expiring) for bulk or destructi
 Dispatches have an audit intent recorded before Jira is called, followed by their outcome.
 The gate covers this app's tools; it cannot constrain other Jira tools or direct REST calls.
 
-**Status:** deployed to a Forge development environment and installed on a Jira Cloud test site. The approval page,
-policy editor, audit log, kill switch and the *Simulate an agent request* panel were exercised on that live site
-(the demo video is recorded there). The Rovo agent and MCP tools are deployed with the app but have not yet been run
-from a Rovo chat or an external MCP client on a live site. See `STATUS.md` for the review and the verification checklist.
+**Status:** deployed to the Forge **production** environment (v2.1.0, the version the install link below installs)
+and to a development environment installed on a free Jira Cloud test site. On that live site the approval page, policy
+editor, audit log, kill switch and the *Simulate an agent request* panel were exercised against real issues, including
+the "same command, different context" pair in the demo video (`SHIP-1` allowed and written, `SHIP-2` held for approval
+because its fix version ships within the week). The Rovo agent and MCP server are deployed with the app, but they have
+**not** been run from a Rovo chat or an external MCP client: see [Rovo integration](#rovo-integration-and-what-was-verified).
+See `STATUS.md` for the review and the verification checklist.
 
-**Demo video (2:58):** VIDEO_URL_PLACEHOLDER (YouTube; link added when the video is published)
+**Demo video (2:33):** VIDEO_URL_PLACEHOLDER (YouTube; link added when the video is published)
 
 **Install for judges:** [install Agent Change Gate on your Jira Cloud site](https://developer.atlassian.com/console/install/67a2afa4-d23d-4d5b-a9b7-1cf01c63defe?signature=AYABeMOYy2xGI9qOFPG1%2BVhSM6gAAAADAAdhd3Mta21zAEthcm46YXdzOmttczp1cy13ZXN0LTI6NzA5NTg3ODM1MjQzOmtleS83MDVlZDY3MC1mNTdjLTQxYjUtOWY5Yi1lM2YyZGNjMTQ2ZTcAuAECAQB4CxqLTo9l4lqXuFjNim1xJM%2Bp%2F3TVP9xHS2BrU5DRRucBFvKkfMY5YAWNYqJd8hgr6QAAAH4wfAYJKoZIhvcNAQcGoG8wbQIBADBoBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDJI50drpOZ9v9bcP7wIBEIA7NxXzVOZtJ97Xc86ozCnJZ0jhht3hQ6ltI205vzvhH3xgC2m%2FWatp1YrohFSMezy32gCyGAZq7WtgFtQAB2F3cy1rbXMAS2Fybjphd3M6a21zOmV1LXdlc3QtMTo3MDk1ODc4MzUyNDM6a2V5LzQ2MzBjZTZiLTAwYzMtNGRlMi04NzdiLTYyN2UyMDYwZTVjYwC4AQICAHi9bVMAkme4qVQX1fQHo6ePw3H40A7cGfz7yrmSfBWMXgGditovz04wvrAW6eo87HjoAAAAfjB8BgkqhkiG9w0BBwagbzBtAgEAMGgGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMpe9xflk2THfCH94aAgEQgDul26V%2BCSFHrVjcEaGfp9%2BlM5pkgYpAOtUTwYzE2nkjPhyQY9c7LTJSHD8U6%2FtohB5cQCecWp%2FIGrDkDgAHYXdzLWttcwBLYXJuOmF3czprbXM6dXMtZWFzdC0xOjcwOTU4NzgzNTI0MzprZXkvNmMxMjBiYTAtNGNkNS00OTg1LWI4MmUtNDBhMDQ5NTJjYzU3ALgBAgIAeDYASx0XCjkny4iLV6vz%2BKtEGSGT6kdt0QRpkn6D%2FlVEARLKhYeL0kJmRgzJY9zYmwMAAAB%2BMHwGCSqGSIb3DQEHBqBvMG0CAQAwaAYJKoZIhvcNAQcBMB4GCWCGSAFlAwQBLjARBAwq9n58xSBUNDYXIz8CARCAOx4DWJO0gIHc87DK6ykxOVmRLdEcOlJWUTrJAlBSd3Xq0kQOMqbAuCNbzfBK2Qu%2B8vaZLrmd0CUpbHRYAgAAAAAMAAAQAAAAAAAAAAAAAAAAADSCxVSkn2dDvIV2dK36H7L%2F%2F%2F%2F%2FAAAAAQAAAAAAAAAAAAAAAQAAADIPweEaJXk%2B4Sjej3OdKV3kB8%2FPFWQ0r8QJC7tP1V8EBfCvTdpG67tAk58h6kHGoi6W9DcXXkDuVbvc7sE3SjvwiNI%3D&product=jira)
 (Forge distribution link, production environment; an org admin must accept the scopes because Teamwork Graph scopes
@@ -69,7 +72,7 @@ resolves it, and each signal can only **raise** the verdict (policy `contextRisk
 ```bash
 node --version   # tests require Node >= 22; the Forge CLI may require a newer patch
 npm ci
-node --test test/*.test.js        # 147 tests, no Atlassian account or network needed
+node --test test/*.test.js        # 149 tests, no Atlassian account or network needed
 # optional: validate manifest.yml against the schema bundled with a local Forge CLI checkout
 # (npm i -g @forge/cli, then point FORGE_CLI_DIR at its install directory)
 FORGE_CLI_DIR=<path-to-@forge/cli> node scripts/validate-manifest.cjs
@@ -102,6 +105,17 @@ The approval page, policy, audit log and the simulation panel do not depend on R
 **Setup (both cases):** Jira → Apps → **Agent Change Gate** → **Policy**. Add your project key to `allowedProjects`
 (the default policy allows nothing) and save. Doing this as a Jira admin is required for the simulation panel.
 
+**Judges evaluating alone:** the default policy has `"requireDistinctApprover": true` (two-person rule), so the admin
+who simulates a request cannot approve it. To try the full approve-and-run flow by yourself, open **Policy**, change
+`"requireDistinctApprover": true` to `false` in the Policy JSON editor and click **Save policy** (set it back to `true`
+afterwards). Approvals decided before that change are invalidated, by design. Our own demo site keeps it at `false`
+so a one-person recording can show the whole flow.
+
+**Reproduce the demo's context pair on your site:** create a version due within 7 days (Project settings → Releases),
+put one issue (say `KAN-2`) in that version and leave another (`KAN-1`) without one. In the simulation panel enter
+`KAN-1` and click **Move to In Progress** (ALLOW, written to Jira), then enter `KAN-2` and click the same button
+(NEEDS APPROVAL, `CONTEXT_RELEASE_SOON`). With no key, the second context button shows the same contrast as a dry run.
+
 **Without Rovo — Simulate an agent request (Jira admins only):** Approvals tab → *Simulate an agent request*.
 Each preset is a raw action input, exactly what the Rovo agent would send, and it goes through the same
 `GateService.guardedChange` path: policy evaluation, caps, two-person approval, audit. Nothing is faked; the gate
@@ -133,6 +147,26 @@ due this week (PENDING_APPROVAL with `CONTEXT_RELEASE_SOON`), *"Comment 'ready f
 *"Move KAN-1 to Done"* (returns PENDING_APPROVAL; approve it on the page, then ask the agent to run the approved
 change), *"Close these 25 issues"* (denied). Audit entries show **Source: Agent**.
 
+## Rovo integration and what was verified
+
+How the app plugs into Rovo (all declared in `manifest.yml`, deployed with the app):
+
+- **`rovo:agent` "Change Gate Agent"**: a Forge Rovo agent whose prompt (`prompts/`) tells it to make every Jira change
+  through the app's guarded actions, never to claim a change unless the action returned `EXECUTED`, and to explain
+  `CONTEXT_` reasons (what the issue is connected to) when a change needs a human.
+- **`action` modules** (11 tools: comment, transition, assign, edit, create, delete, run-approved-change,
+  approval-status, my-activity, policy-summary, issue-context). Each action is a Forge function that calls the same
+  `GateService` the Jira page and simulator use; the requester's identity comes from the Forge invocation context
+  (`context.principal.accountId`), never from the LLM-written payload.
+- **`rovo:skill`** packages the same tools for other Rovo agents, and **`rovo:mcp`** exposes them to external MCP
+  clients through Atlassian's remote MCP endpoint.
+
+What was verified: the actions' code paths are covered by the unit/flow tests, the manifest passes `forge lint`, and
+the modules deploy. What was **not** verified: a conversation in Rovo chat. Rovo chat was not available on our free
+developer site (the site's `/chat` page returns Jira's "dead link" page), so the demo video uses the admin simulator,
+which sends the exact action input an agent would send through the same gate. We make no claim of a recorded Rovo
+conversation; on a site with Rovo chat, follow **With Rovo** above.
+
 ## Default policy
 
 Nothing allowed until an admin adds projects. Comments/transitions/edits/assign/create allowed in allowed projects;
@@ -150,6 +184,7 @@ See `STATUS.md` for the operational limits of this approach.
 
 Forge (UI Kit, KVS, Rovo modules), Jira REST v3, Node.js `node:test`. Libraries: `@forge/api`, `@forge/bridge`,
 `@forge/kvs`, `@forge/react`, `@forge/resolver`, `react` 18. Developed with AI coding assistance;
-local unit and flow tests cover the gate and adapters, with Forge runtime checks still pending.
+local unit and flow tests cover the gate and adapters; the Forge runtime (UI, resolvers, Jira and Teamwork Graph
+reads) was exercised on the live development site, the Rovo chat path was not (see above).
 
 MIT licence.

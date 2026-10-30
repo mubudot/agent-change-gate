@@ -1,8 +1,10 @@
 # Status
 
-Deployed to the Forge development environment and installed on a Jira Cloud test site. The global page (approvals,
-policy, audit log, kill switch, simulation panel) was exercised there. Not submitted. Rovo agent / MCP behaviour is
-not yet verified from a Rovo chat or an external MCP client.
+Deployed to Forge **production** (v2.1.0, 2026-10-31, the version the judge install link installs) and to the
+development environment, which is installed on a free Jira Cloud test site. The global page (approvals, policy,
+audit log, kill switch, simulation panel) and the context-aware gate (Jira release facts, Teamwork Graph reads) were
+exercised there with live issues. Not submitted to Devpost or the Marketplace. Rovo agent / MCP behaviour is not
+verified from a Rovo chat or an external MCP client (Rovo chat is not available on the free test site).
 
 ## Review (2026-10-30)
 
@@ -18,7 +20,7 @@ not yet verified from a Rovo chat or an external MCP client.
 | P2 | Pending deduplication depended on the first 100 eventually consistent query results; expired/other users' entries could hide active requests. | Strong point index for deduplication; queue scans cursor pages and filters expiry/visibility before applying its display limit. |
 | P3 | Documentation overstated audit/cap guarantees and deletion always queuing; one scope was unused. | README, DESIGN, prompt and skill now describe dispatch intent, attempted-target counting, fixed buckets, scope of enforcement and refusal codes. Removed `read:jira-user`; documented mypermissions classic scope is `read:jira-work`. |
 
-Local checks: **118 tests passing** (as of 2026-10-31) with `node --test test/*.test.js` on Node 22.23.3;
+Local checks: **149 tests passing** (as of 2026-10-31, after Codex review round 5) with `node --test test/*.test.js` on Node 22.23.3;
 `FORGE_CLI_DIR=../work/forge-cli node scripts/validate-manifest.cjs` passes against the bundled CLI schema.
 Unit tests exercise pure policy, approval flows, deterministic races, storage failures, Jira routing and SDK-adapter contracts.
 They do not execute the Forge runtime or mount UI Kit; the Forge runtime was exercised separately by the development deploys (see Live site notes).
@@ -47,9 +49,11 @@ They do not execute the Forge runtime or mount UI Kit; the Forge runtime was exe
   after termination/storage failure. Queue scans can grow with expired index entries; UI shows at most 50 active entries.
 - Jira-admin authority is checked at decision time as the invoking human. The app invalidates decisions when its
   approver configuration changes; it does not recheck a past approver's Jira-admin membership as another user at run time.
-- Submission still requires a deployed, installable app, judge installation link and setup instructions, public demo
-  video and Devpost submission. The manifest/skill support the intended Agents/MCP bonus entries; live exposure,
-  public source availability and any Runs on Atlassian badge are not verified. Teamwork Graph/Marketplace work is absent.
+- Submission still requires a public demo video, a public repository and the Devpost submission. The production
+  deploy and the judge installation link exist (setup steps in README). The manifest/skill support the intended
+  Agents/MCP bonus entries; a live Rovo chat run and an external MCP client run are not verified. Teamwork Graph
+  context is implemented (curated queries, read as the user). A Marketplace listing is drafted but deliberately not
+  submitted (submitting would replace the private distribution link judges use).
 
 ## Live site notes (a free Jira Cloud test site, development)
 
@@ -134,3 +138,12 @@ They do not execute the Forge runtime or mount UI Kit; the Forge runtime was exe
 - [Jira request authentication/routing](https://developer.atlassian.com/platform/forge/apis-reference/fetch-api-product.requestjira/), [mypermissions scope](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-permissions/)
 - [UI Kit components](https://developer.atlassian.com/platform/forge/ui-kit/components/), [packaging](https://developer.atlassian.com/platform/forge/manifest-reference/packaging/)
 - [Official hackathon rules](https://codegeist2026.devpost.com/rules): installation/video requirements and Agents/MCP bonus paths agree with RULES.md. Rules say `rovo:action`; the current Forge module reference uses `action`. This entry also declares `rovo:agent` directly.
+
+## Context-aware gating review (2026-10-31)
+
+Codex reviewed the Teamwork Graph / context feature over five rounds (`cffc313..HEAD`). Round 1–3 findings (count-only
+context text for approvers, per-issue NEW_RISK, outage tolerance only for reviewed context, no fact truncation, graph
+pagination gaps, bounded graph reads, run-time context outage is NEW_RISK unless approved) were fixed with tests.
+Round 4: no material issues, one P3 (Teamwork Graph listed as a checked source when no Graph query succeeded), fixed by
+returning per-family `answered` coverage from the client and deriving `sources` from it (+2 regression tests).
+Round 5: no findings; 149 tests passing.
