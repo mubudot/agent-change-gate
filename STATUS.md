@@ -1,7 +1,8 @@
 # Status
 
-Deployed to the Forge development environment and installed on a free Jira Cloud test site (Jira global page loads).
-Not submitted. Rovo agent / MCP behaviour is not yet verified on a Rovo-enabled site.
+Deployed to the Forge development environment and installed on a Jira Cloud test site. The global page (approvals,
+policy, audit log, kill switch, simulation panel) was exercised there. Not submitted. Rovo agent / MCP behaviour is
+not yet verified from a Rovo chat or an external MCP client.
 
 ## Review (2026-10-30)
 
@@ -17,7 +18,7 @@ Not submitted. Rovo agent / MCP behaviour is not yet verified on a Rovo-enabled 
 | P2 | Pending deduplication depended on the first 100 eventually consistent query results; expired/other users' entries could hide active requests. | Strong point index for deduplication; queue scans cursor pages and filters expiry/visibility before applying its display limit. |
 | P3 | Documentation overstated audit/cap guarantees and deletion always queuing; one scope was unused. | README, DESIGN, prompt and skill now describe dispatch intent, attempted-target counting, fixed buckets, scope of enforcement and refusal codes. Removed `read:jira-user`; documented mypermissions classic scope is `read:jira-work`. |
 
-Local checks: **88 tests passing** with `node --test test/*.test.js` on Node 22.23.3;
+Local checks: **118 tests passing** (as of 2026-10-31) with `node --test test/*.test.js` on Node 22.23.3;
 `FORGE_CLI_DIR=../work/forge-cli node scripts/validate-manifest.cjs` passes against the bundled CLI schema.
 Unit tests exercise pure policy, approval flows, deterministic races, storage failures, Jira routing and SDK-adapter contracts.
 They do not execute the Forge runtime or mount UI Kit. The Forge dependencies are not installed in this checkout.

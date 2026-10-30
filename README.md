@@ -6,9 +6,15 @@ and human approval (two-person rule, single-use, expiring) for bulk or destructi
 Dispatches have an audit intent recorded before Jira is called, followed by their outcome.
 The gate covers this app's tools; it cannot constrain other Jira tools or direct REST calls.
 
-**Status:** deployed to a Forge development environment and installed on a test site; the approval page loads.
-The Rovo agent and MCP tools are not yet verified on a Rovo-enabled site. See `STATUS.md` for the review and the
-live verification checklist.
+**Status:** deployed to a Forge development environment and installed on a Jira Cloud test site. The approval page,
+policy editor, audit log, kill switch and the *Simulate an agent request* panel were exercised on that live site
+(the demo video is recorded there). The Rovo agent and MCP tools are deployed with the app but have not yet been run
+from a Rovo chat or an external MCP client on a live site. See `STATUS.md` for the review and the verification checklist.
+
+**Demo video (2:58):** VIDEO_URL_PLACEHOLDER (YouTube; link added when the video is published)
+
+**Install for judges:** INSTALL_LINK_PLACEHOLDER (Forge "Start sharing your app" link; then follow
+[Testing with and without Rovo](#testing-with-and-without-rovo))
 
 Built for Codegeist 2026 (Apps for Software Teams; bonus: Rovo Agents, Atlassian MCP). See `DESIGN.md`.
 
