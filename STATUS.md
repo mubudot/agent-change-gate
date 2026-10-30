@@ -97,6 +97,11 @@ They do not execute the Forge runtime or mount UI Kit. The Forge dependencies ar
   simulations stay listed (`simok:` index) until run. Two-person rule unchanged: solo demos set
   `requireDistinctApprover: false`. Codex review: work/codex_codegeist_demo.md (3 P2 + 1 P3, all fixed with tests).
   115 tests. Manifest/scopes unchanged.
+- 2026-10-30 19:35 (6e20084, dev deploy run 41049159787): UI copy fixes found while recording the demo.
+  Policy caps now say "More than N issues in one call need approval" (gate uses units > threshold);
+  running an approved simulated request says "Approved change ran once (dry run): Jira was not changed."
+  instead of "Gate verdict ALLOW"; the simulator's NEEDS APPROVAL banner is replaced once the request is
+  approved/rejected/expired/executed. 118 tests. Manifest/scopes unchanged.
 - Rovo off: installation succeeds and only Rovo features are missing (Atlassian dev-community answer, linked in
   README); confirmed by our own install on the test site. The global page, policy, audit and simulation panel do not use Rovo.
 
@@ -129,8 +134,3 @@ They do not execute the Forge runtime or mount UI Kit. The Forge dependencies ar
 - [Jira request authentication/routing](https://developer.atlassian.com/platform/forge/apis-reference/fetch-api-product.requestjira/), [mypermissions scope](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-permissions/)
 - [UI Kit components](https://developer.atlassian.com/platform/forge/ui-kit/components/), [packaging](https://developer.atlassian.com/platform/forge/manifest-reference/packaging/)
 - [Official hackathon rules](https://codegeist2026.devpost.com/rules): installation/video requirements and Agents/MCP bonus paths agree with RULES.md. Rules say `rovo:action`; the current Forge module reference uses `action`. This entry also declares `rovo:agent` directly.
-- 2026-10-30 19:35 (6e20084, dev deploy run 41049159787): UI copy fixes found while recording the demo.
-  Policy caps now say "More than N issues in one call need approval" (gate uses units > threshold);
-  running an approved simulated request says "Approved change ran once (dry run): Jira was not changed."
-  instead of "Gate verdict ALLOW"; the simulator's NEEDS APPROVAL banner is replaced once the request is
-  approved/rejected/expired/executed. 118 tests. Manifest/scopes unchanged.
