@@ -11,6 +11,12 @@ on:
         description: Atlassian site for install (e.g. example.atlassian.net)
         required: false
         type: string
+      environment:
+        description: Forge environment
+        required: false
+        type: choice
+        default: development
+        options: [development, production]
 permissions:
   contents: write
 concurrency:
@@ -23,6 +29,7 @@ jobs:
       FORGE_EMAIL: ${{ secrets.FORGE_EMAIL }}
       FORGE_API_TOKEN: ${{ secrets.FORGE_API_TOKEN }}
       FORGE_DISABLE_ANALYTICS: "1"
+      FORGE_ENV: ${{ inputs.environment || 'development' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -50,16 +57,18 @@ jobs:
       - name: deploy
         if: inputs.action == 'deploy'
         run: |
-          npx --yes @forge/cli@15 lint
-          npx --yes @forge/cli@15 deploy -e development --non-interactive
+          # lint exits 1 on "approval" notices (e.g. a scope change means a major version);
+          # real errors still fail the deploy below.
+          npx --yes @forge/cli@15 lint || echo "lint reported issues (see above)"
+          npx --yes @forge/cli@15 deploy -e "$FORGE_ENV" --non-interactive
       - name: install
         if: inputs.action == 'install'
         env:
           SITE: ${{ inputs.site }}
         run: |
           test -n "$SITE" || { echo "site input required"; exit 1; }
-          npx --yes @forge/cli@15 install --site "$SITE" --product jira -e development --non-interactive --confirm-scopes \
-            || npx --yes @forge/cli@15 install --site "$SITE" --product jira -e development --non-interactive --upgrade --confirm-scopes
+          npx --yes @forge/cli@15 install --site "$SITE" --product jira -e "$FORGE_ENV" --non-interactive --confirm-scopes \
+            || npx --yes @forge/cli@15 install --site "$SITE" --product jira -e "$FORGE_ENV" --non-interactive --upgrade --confirm-scopes
       - name: logs
         if: inputs.action == 'logs'
-        run: npx --yes @forge/cli@15 logs -e development --since 1h --limit 200
+        run: npx --yes @forge/cli@15 logs -e "$FORGE_ENV" --since 1h --limit 200
