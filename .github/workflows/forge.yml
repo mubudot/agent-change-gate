@@ -35,7 +35,11 @@ jobs:
         run: npx --yes @forge/cli@15 whoami
       - name: register
         if: inputs.action == 'register'
-        run: npx --yes @forge/cli@15 register --accept-terms "Agent Change Gate" </dev/null
+        # The CLI creates a Developer Space through an interactive name prompt only,
+        # so run it under a pseudo-TTY that answers that one prompt.
+        run: |
+          npm install -g @forge/cli@15 >/dev/null 2>&1
+          { sleep 5; printf 'agent-change-gate\r'; sleep 60; } | script -qefc 'forge register --accept-terms "Agent Change Gate"' /dev/null
       - name: commit app id
         if: inputs.action == 'register'
         run: |
