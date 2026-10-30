@@ -1,5 +1,6 @@
 // Forge entry point: platform wiring and the asUser transport.
-import api, { assumeTrustedRoute } from '@forge/api';
+// Named imports only: @forge/* packages are CommonJS, so default imports are unreliable under ESM.
+import { asUser, assumeTrustedRoute } from '@forge/api';
 import { kvs, WhereConditions } from '@forge/kvs';
 import { KvsStore } from './store/kvs.js';
 import { Repo } from './store/repo.js';
@@ -12,7 +13,7 @@ import { buildResolver } from './resolvers.js';
 // so the gate can only ever narrow what that user could already do.
 async function requestAsUser(method, path, body) {
   // Paths are built in jira/client.js with encodeURIComponent on every parameter.
-  const res = await api.asUser().requestJira(assumeTrustedRoute(path), {
+  const res = await asUser().requestJira(assumeTrustedRoute(path), {
     method,
     headers: { Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),

@@ -1,5 +1,7 @@
 // UI Kit resolvers for the approval dashboard. Identity comes from the Forge context.
-import Resolver from '@forge/resolver';
+// Named import on purpose: @forge/resolver is CommonJS, and with "type": "module" both Node and
+// the Forge bundler resolve a default import to the whole module.exports object, not the class.
+import { makeResolver } from '@forge/resolver';
 
 export function resolverDefinitions(getService) {
   return {
@@ -11,7 +13,5 @@ export function resolverDefinitions(getService) {
 }
 
 export function buildResolver(getService) {
-  const resolver = new Resolver();
-  for (const [name, fn] of Object.entries(resolverDefinitions(getService))) resolver.define(name, fn);
-  return resolver.getDefinitions();
+  return makeResolver(resolverDefinitions(getService));
 }
