@@ -41,7 +41,7 @@ test('KVS prefix query uses beginsWith and forwards pagination cursors', async (
   assert.deepEqual(calls, [['where', 'key', { beginsWith: 'open:' }], ['limit', 50], ['cursor', 'page-two']]);
 });
 
-test('single-use claims and mutation locks have no TTL', async () => {
+test('single-use claims never expire; the mutation lock is a bounded lease', async () => {
   const memory = new MemoryStore();
   const calls = [];
   const set = memory.set.bind(memory);
@@ -49,8 +49,10 @@ test('single-use claims and mutation locks have no TTL', async () => {
   const repo = new Repo(memory);
   assert.equal(await repo.claimExecution('id-fixture', ALICE, 0), true);
   assert.equal(await repo.claimExecution('id-fixture', ALICE, 1), false);
-  await repo.withMutation(async () => {});
   for (const call of calls) assert.deepEqual(call[2], { failIfExists: true });
+  calls.length = 0;
+  await repo.withMutation(async () => {});
+  assert.deepEqual(calls[0][2], { failIfExists: true, ttlSeconds: 120 });
 });
 
 test('expired requests and other actors do not starve visible requests beyond the first page', async () => {

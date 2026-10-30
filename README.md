@@ -52,11 +52,10 @@ and moves into Done/Closed/Won't Do need approval; 30 attempted targets/user/UTC
 100/user/calendar day, 500/site/calendar day (policy timezone). Attempts are reserved before execution and
 are not refunded on failure or a lost response. Hourly limits are fixed buckets, not rolling windows.
 
-Concurrent mutations return `REFUSED` / `BUSY`. Mutations use one installation-wide, nonexpiring storage lock
-so parallel calls cannot race usage, human decisions, or policy updates. If an invocation is terminated,
-the lock may remain held; an operator must confirm the invocation has stopped before removing `mutation-lock`
-from this installation's storage. Do not clear a lock merely because it is old. Recovery is not exposed as an agent tool.
-See `STATUS.md` for the operational limits of this fail-closed approach.
+Concurrent mutations return `REFUSED` / `BUSY`. Mutations take one installation-wide storage lease
+(`FAIL_IF_EXISTS`, 120 s, longer than Forge's 25 s invocation limit) so parallel calls cannot race usage,
+human decisions, or policy updates. A crashed invocation blocks mutations for at most about two minutes.
+See `STATUS.md` for the operational limits of this approach.
 
 ## Built with
 

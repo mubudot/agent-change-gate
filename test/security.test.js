@@ -211,10 +211,26 @@ test('lost Jira response leaves reserved usage and an audit intent', async () =>
   assert.ok((await env.repo.listAudit()).some((entry) => entry.outcome === 'EXECUTION_STARTED'));
 });
 
-test('an orphaned mutation lock fails closed without lease expiry', async () => {
+test('a live lease blocks; an orphaned lease from a crashed call expires', async () => {
   const env = await setup();
-  await env.store.set('mutation-lock', { held: true });
-  env.advance(8 * 86400_000);
+  await env.store.set('mutation-lock', { owner: 'crashed', expiresAt: Date.UTC(2026, 10, 2, 9, 0, 0) + 60_000 });
   assert.equal((await env.svc.guardedChange('jira.issue.comment', comment, ALICE)).code, 'BUSY');
   assert.equal(env.writes().length, 0);
+  env.advance(61_000);
+  assert.equal((await env.svc.guardedChange('jira.issue.comment', comment, ALICE)).status, 'EXECUTED');
+  assert.equal(await env.store.get('mutation-lock'), undefined);
+});
+
+test('a legacy lock without expiry is treated as stale', async () => {
+  const env = await setup();
+  await env.store.set('mutation-lock', { held: true });
+  assert.equal((await env.svc.guardedChange('jira.issue.comment', comment, ALICE)).status, 'EXECUTED');
+});
+
+test('release never deletes a lease taken over by someone else', async () => {
+  const env = await setup();
+  await env.repo.withMutation(async () => {
+    await env.store.set('mutation-lock', { owner: 'other', expiresAt: Number.MAX_SAFE_INTEGER });
+  }, 0);
+  assert.equal((await env.store.get('mutation-lock')).owner, 'other');
 });

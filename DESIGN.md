@@ -90,10 +90,10 @@ do contain full write payloads and currently have no retention purge.
 
 All mutations (policy updates, human decisions, queuing, previews, execution) acquire one installation-wide
 `FAIL_IF_EXISTS` storage lock. Contention returns `REFUSED` / `BUSY`. Counters are updated while holding the lock,
-before writes; failed attempts still count. The lock has no TTL, so a delayed invocation cannot outlive a lease
-and race a new owner. Termination can leave the gate locked; operator recovery requires confirming the old invocation
-has stopped before deleting the lock. There is no automatic recovery or agent-accessible unlock. This favors
-fail-closed safety over throughput/availability; see `STATUS.md` before live use.
+before writes; failed attempts still count. The lock is a 120 s lease with an owner token: longer than any
+Forge invocation (25 s default, no long-running functions declared), so it cannot expire under a live owner, and a
+crashed invocation unblocks itself. Release deletes only the caller's own lease. This serialises agent writes per
+site — fine for the hackathon scale; see `STATUS.md`.
 
 Per-call bulk limits apply to the submitted call. The gate cannot infer a logical task across separate calls;
 several small calls below aggregate caps can still avoid a per-call bulk approval. Hourly buckets reset on UTC

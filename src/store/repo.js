@@ -4,6 +4,8 @@ import { GateError, withExpiry, Status } from '../policy/approvals.js';
 import { createHash } from 'node:crypto';
 
 const MAX_TS = 9_999_999_999_999;
+const LOCK_KEY = 'mutation-lock';
+export const LOCK_LEASE_MS = 120_000; // > Forge's 25 s default invocation limit
 const actorKey = (actor) => createHash('sha256').update(actor).digest('hex');
 
 export class Repo {
@@ -11,17 +13,29 @@ export class Repo {
     this.store = store;
   }
 
-  // No TTL: an expired lease could let a suspended invocation resume alongside
-  // a new owner. A terminated invocation instead leaves the gate closed until
-  // an operator has confirmed it stopped and removed this key.
-  async withMutation(work) {
-    if (!(await this.store.set('mutation-lock', { held: true }, { failIfExists: true }))) {
-      throw new GateError('BUSY', 'another gate mutation is in progress; retry later');
+  // Installation-wide mutation lease. A Forge function invocation is hard-limited
+  // (25 s by default; this app declares no long-running functions), so a lease
+  // longer than that cannot expire under a still-running owner. A crashed
+  // invocation therefore blocks the gate for at most LOCK_LEASE_MS, not forever.
+  async withMutation(work, nowMs = Date.now()) {
+    const owner = globalThis.crypto.randomUUID();
+    const lease = { owner, expiresAt: nowMs + LOCK_LEASE_MS };
+    let acquired = await this.store.set(LOCK_KEY, lease, { failIfExists: true, ttlSeconds: LOCK_LEASE_MS / 1000 });
+    if (!acquired) {
+      const held = await this.store.get(LOCK_KEY);
+      const stale = !held || !Number.isFinite(held.expiresAt) || held.expiresAt <= nowMs;
+      if (stale) {
+        await this.store.delete(LOCK_KEY);
+        // Still conditional: if two callers both saw a stale lease, only one wins.
+        acquired = await this.store.set(LOCK_KEY, lease, { failIfExists: true, ttlSeconds: LOCK_LEASE_MS / 1000 });
+      }
     }
+    if (!acquired) throw new GateError('BUSY', 'another gate mutation is in progress; retry in a moment');
     try {
       return await work();
     } finally {
-      await this.store.delete('mutation-lock');
+      const current = await this.store.get(LOCK_KEY);
+      if (current?.owner === owner) await this.store.delete(LOCK_KEY);
     }
   }
 

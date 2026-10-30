@@ -274,7 +274,7 @@ export class GateService {
   async mutate(actor, work) {
     if (!actor) return out('INVALID', { errors: ['no user context'] });
     try {
-      return await this.repo.withMutation(work);
+      return await this.repo.withMutation(work, this.now());
     } catch (e) {
       if (!(e instanceof GateError)) throw e;
       return out('REFUSED', { code: e.code, message: e.message });

@@ -16,19 +16,20 @@ Local implementation only. Not registered, deployed, installed, or submitted. No
 | P2 | Pending deduplication depended on the first 100 eventually consistent query results; expired/other users' entries could hide active requests. | Strong point index for deduplication; queue scans cursor pages and filters expiry/visibility before applying its display limit. |
 | P3 | Documentation overstated audit/cap guarantees and deletion always queuing; one scope was unused. | README, DESIGN, prompt and skill now describe dispatch intent, attempted-target counting, fixed buckets, scope of enforcement and refusal codes. Removed `read:jira-user`; documented mypermissions classic scope is `read:jira-work`. |
 
-Local checks: **85 tests passing** with `node --test test/*.test.js` on Node 22.23.3;
+Local checks: **87 tests passing** with `node --test test/*.test.js` on Node 22.23.3;
 `FORGE_CLI_DIR=../work/forge-cli node scripts/validate-manifest.cjs` passes against the bundled CLI schema.
 Unit tests exercise pure policy, approval flows, deterministic races, storage failures, Jira routing and SDK-adapter contracts.
 They do not execute the Forge runtime or mount UI Kit. The Forge dependencies are not installed in this checkout.
 
 ## Remaining limits
 
-- **P2 — availability/recovery:** the installation-wide `mutation-lock` has no TTL. Contention returns `REFUSED/BUSY`;
-  an invocation terminated before cleanup can leave mutations (including policy edits) blocked. An operator must
-  confirm that invocation has stopped, inspect audit/usage/approval state and Jira outcomes, and only then remove
-  the lock through installation storage tooling. Do not clear it just because it is old. Recovery is manual and
-  must be rehearsed on a real site before production use. An `EXECUTING` request with a claim is never retried:
-  inspect Jira and request a new approval for any remaining work. Do not delete single-use claim keys.
+- **P2 — availability (changed after review):** the installation-wide `mutation-lock` is now a 120 s lease
+  (owner token + expiry, KVS TTL as backup). Forge invocations are capped at 25 s by default and this app declares
+  no long-running functions, so a lease cannot expire under a live owner; a crashed invocation blocks gate mutations
+  for at most ~2 minutes instead of until manual cleanup. Release only deletes the caller's own lease. Contention
+  still returns `REFUSED/BUSY` (serialises all agent writes per site — fine for a hackathon, a scaling limit later).
+  An `EXECUTING` request with a claim is never retried: inspect Jira and request a new approval for remaining work.
+  Do not delete single-use claim keys. Verify the lease reasoning against the real invocation limit on a site.
 - **P2 — Jira read/write race:** Jira issue moves and workflow configuration changes are external to the app's
   storage lock. Stable issue IDs prevent key reuse from redirecting writes, but Jira does not provide a transaction
   spanning gate resolution and mutation. A configuration/project change between the final read and dispatch remains possible.
