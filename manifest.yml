@@ -1,0 +1,307 @@
+# Agent Change Gate - Forge manifest.
+# app.id is a placeholder until `forge register` runs (needs an Atlassian login).
+app:
+  id: ari:cloud:ecosystem::app/00000000-0000-0000-0000-000000000000
+  runtime:
+    name: nodejs24.x
+    memoryMB: 256
+    architecture: arm64
+
+modules:
+  rovo:agent:
+    - key: change-gate-agent
+      name: Change Gate Agent
+      description: Makes Jira changes for you, but only through a deterministic policy gate with caps, allowlists and human approval for risky or bulk changes.
+      prompt: resource:agent-prompt;agent-prompt.txt
+      conversationStarters:
+        - Comment on the issue I'm looking at
+        - Move these issues to In Review
+        - What is the agent change policy here?
+        - Is my approval request approved yet?
+      actions:
+        - acg-comment-issues
+        - acg-transition-issues
+        - acg-assign-issues
+        - acg-edit-issues
+        - acg-create-issue
+        - acg-delete-issues
+        - acg-run-approved-change
+        - acg-approval-status
+        - acg-my-activity
+        - acg-policy-summary
+      skills:
+        - agent-change-gate
+
+  rovo:skill:
+    - key: agent-change-gate
+      source:
+        dir: skills/agent-change-gate
+      dependencies:
+        tools:
+          - acg-comment-issues
+          - acg-transition-issues
+          - acg-assign-issues
+          - acg-edit-issues
+          - acg-create-issue
+          - acg-delete-issues
+          - acg-run-approved-change
+          - acg-approval-status
+          - acg-my-activity
+          - acg-policy-summary
+
+  rovo:mcp:
+    - key: change-gate-mcp
+      name: Agent Change Gate
+      tools:
+        - acg-comment-issues
+        - acg-transition-issues
+        - acg-assign-issues
+        - acg-edit-issues
+        - acg-create-issue
+        - acg-delete-issues
+        - acg-run-approved-change
+        - acg-approval-status
+        - acg-my-activity
+        - acg-policy-summary
+
+  action:
+    - key: acg-comment-issues
+      name: Guarded - comment on issues
+      function: fn-comment
+      actionVerb: UPDATE
+      description: Add the same comment to one or more Jira issues through the change gate. Small changes run at once; large or risky ones return PENDING_APPROVAL and change nothing.
+      inputs:
+        issueKeys:
+          title: "Issue keys"
+          type: string
+          required: false
+          description: "Comma-separated issue keys, e.g. DEMO-1,DEMO-2. Omit to use the issue the user is viewing."
+        body:
+          title: "Comment"
+          type: string
+          required: true
+          description: "Plain-text comment body."
+        preview:
+          title: "Preview only"
+          type: boolean
+          required: false
+          description: "If true, only report what the gate would decide."
+    - key: acg-transition-issues
+      name: Guarded - transition issues
+      function: fn-transition
+      actionVerb: UPDATE
+      description: Move one or more Jira issues to a target status through the change gate. Moving into protected statuses (such as Done) or many issues at once needs human approval.
+      inputs:
+        issueKeys:
+          title: "Issue keys"
+          type: string
+          required: false
+          description: "Comma-separated issue keys. Omit to use the issue the user is viewing."
+        toStatus:
+          title: "Target status"
+          type: string
+          required: true
+          description: "Target status name, e.g. In Review."
+        preview:
+          title: "Preview only"
+          type: boolean
+          required: false
+          description: "If true, only report what the gate would decide."
+    - key: acg-assign-issues
+      name: Guarded - assign issues
+      function: fn-assign
+      actionVerb: UPDATE
+      description: Assign or unassign one or more Jira issues through the change gate.
+      inputs:
+        issueKeys:
+          title: "Issue keys"
+          type: string
+          required: false
+          description: "Comma-separated issue keys. Omit to use the issue the user is viewing."
+        assigneeAccountId:
+          title: "Assignee account ID"
+          type: string
+          required: true
+          description: "Atlassian accountId of the assignee, or none to unassign."
+        preview:
+          title: "Preview only"
+          type: boolean
+          required: false
+          description: "If true, only report what the gate would decide."
+    - key: acg-edit-issues
+      name: Guarded - edit issue fields
+      function: fn-edit
+      actionVerb: UPDATE
+      description: Change summary, priority, due date or labels of one or more Jira issues through the change gate. Protected fields need human approval.
+      inputs:
+        issueKeys:
+          title: "Issue keys"
+          type: string
+          required: false
+          description: "Comma-separated issue keys. Omit to use the issue the user is viewing."
+        summary:
+          title: "New summary"
+          type: string
+          required: false
+          description: "New issue summary."
+        priority:
+          title: "New priority"
+          type: string
+          required: false
+          description: "Priority name, e.g. High."
+        dueDate:
+          title: "New due date"
+          type: string
+          required: false
+          description: "Due date as YYYY-MM-DD."
+        labelsAdd:
+          title: "Labels to add"
+          type: string
+          required: false
+          description: "Comma-separated labels to add."
+        labelsRemove:
+          title: "Labels to remove"
+          type: string
+          required: false
+          description: "Comma-separated labels to remove."
+        preview:
+          title: "Preview only"
+          type: boolean
+          required: false
+          description: "If true, only report what the gate would decide."
+    - key: acg-create-issue
+      name: Guarded - create issue
+      function: fn-create
+      actionVerb: CREATE
+      description: Create a Jira issue in an allowed project through the change gate.
+      inputs:
+        projectKey:
+          title: "Project key"
+          type: string
+          required: true
+          description: "Project key, e.g. DEMO."
+        issueType:
+          title: "Issue type"
+          type: string
+          required: false
+          description: "Issue type name. Defaults to Task."
+        summary:
+          title: "Summary"
+          type: string
+          required: true
+          description: "Issue summary."
+        description:
+          title: "Description"
+          type: string
+          required: false
+          description: "Plain-text description."
+        preview:
+          title: "Preview only"
+          type: boolean
+          required: false
+          description: "If true, only report what the gate would decide."
+    - key: acg-delete-issues
+      name: Guarded - delete issues
+      function: fn-delete
+      actionVerb: DELETE
+      description: Request deletion of Jira issues. Deletion always needs a human approver; this call only creates the approval request.
+      inputs:
+        issueKeys:
+          title: "Issue keys"
+          type: string
+          required: false
+          description: "Comma-separated issue keys. Omit to use the issue the user is viewing."
+        preview:
+          title: "Preview only"
+          type: boolean
+          required: false
+          description: "If true, only report what the gate would decide."
+    - key: acg-run-approved-change
+      name: Run an approved change
+      function: fn-run-approved
+      actionVerb: TRIGGER
+      description: Run a change that a human approved. Only the user who requested it can run it, exactly once, and only if the policy still allows it.
+      inputs:
+        approvalId:
+          title: "Approval ID"
+          type: string
+          required: true
+          description: "The approvalId returned with PENDING_APPROVAL."
+    - key: acg-approval-status
+      name: Check approval status
+      function: fn-approval-status
+      actionVerb: GET
+      description: Check whether one of your approval requests was approved, rejected or expired.
+      inputs:
+        approvalId:
+          title: "Approval ID"
+          type: string
+          required: true
+          description: "The approvalId returned with PENDING_APPROVAL."
+    - key: acg-my-activity
+      name: My guarded agent activity
+      function: fn-my-activity
+      actionVerb: GET
+      description: List the most recent agent changes made or requested on your behalf, with gate verdicts.
+      inputs:
+        limit:
+          title: "Limit"
+          type: integer
+          required: false
+          description: "Ignored for now; returns up to 20 entries."
+    - key: acg-policy-summary
+      name: Show agent change policy
+      function: fn-policy-summary
+      actionVerb: GET
+      description: Show the current agent change policy (allowed projects, caps, what needs approval) so you can plan changes that will pass.
+      inputs:
+        detail:
+          title: "Detail"
+          type: string
+          required: false
+          description: "Unused."
+
+  jira:globalPage:
+    - key: change-gate-page
+      title: Agent Change Gate
+      resource: dashboard
+      resolver:
+        function: fn-ui
+      render: native
+
+  function:
+    - key: fn-comment
+      handler: index.commentIssues
+    - key: fn-transition
+      handler: index.transitionIssues
+    - key: fn-assign
+      handler: index.assignIssues
+    - key: fn-edit
+      handler: index.editIssues
+    - key: fn-create
+      handler: index.createIssue
+    - key: fn-delete
+      handler: index.deleteIssues
+    - key: fn-run-approved
+      handler: index.runApproved
+    - key: fn-approval-status
+      handler: index.approvalStatus
+    - key: fn-my-activity
+      handler: index.myActivity
+    - key: fn-policy-summary
+      handler: index.policySummary
+    - key: fn-ui
+      handler: index.uiResolver
+
+resources:
+  - key: dashboard
+    path: src/frontend/index.jsx
+  - key: agent-prompt
+    path: prompts
+
+permissions:
+  scopes:
+    - read:jira-work
+    - write:jira-work
+    - read:jira-user
+    - storage:app
