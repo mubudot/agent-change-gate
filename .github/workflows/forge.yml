@@ -58,4 +58,5 @@ jobs:
           SITE: ${{ inputs.site }}
         run: |
           test -n "$SITE" || { echo "site input required"; exit 1; }
-          npx --yes @forge/cli@15 install --site "$SITE" --product jira -e development --non-interactive --upgrade --confirm-scopes
+          npx --yes @forge/cli@15 install --site "$SITE" --product jira -e development --non-interactive --confirm-scopes \
+            || npx --yes @forge/cli@15 install --site "$SITE" --product jira -e development --non-interactive --upgrade --confirm-scopes
