@@ -85,12 +85,20 @@ export function simulationMessage(r) {
   const dry = r?.dryRun ? ' Dry run: Jira was not changed.' : '';
   switch (r?.status) {
     case 'EXECUTED':
+      // runApproved results carry approvedBy; a direct ALLOW from simulate does not.
+      if (r.approvedBy) {
+        return { tone: 'success', text: r.dryRun ? 'Approved change ran once (dry run): Jira was not changed.' : 'Approved change ran once and was written to Jira.' };
+      }
       return { tone: 'success', text: `Gate verdict ALLOW: the change ran.${dry}` };
     case 'PARTIAL':
     case 'FAILED':
       return { tone: 'warning', text: `The gate allowed it but Jira refused some writes: ${(r.results ?? []).filter((x) => !x.ok).map((x) => `${x.key}: ${x.error}`).join('; ')}` };
     case 'PENDING_APPROVAL':
-      return { tone: 'information', text: `Gate verdict NEEDS APPROVAL (${why}). It is waiting in the approvals table; nothing was changed.` };
+      return {
+        tone: 'information',
+        text: `Gate verdict NEEDS APPROVAL (${why}). It is waiting in the approvals table; nothing was changed.`,
+        approvalId: r.approvalId,
+      };
     case 'DENIED':
       return { tone: 'error', text: `Gate verdict DENY: ${why}. Nothing was changed.` };
     case 'REFUSED':
@@ -98,4 +106,35 @@ export function simulationMessage(r) {
     default:
       return { tone: 'warning', text: (r?.errors ?? []).join('; ') || r?.message || 'The request was not completed.' };
   }
+}
+
+/**
+ * The simulator's NEEDS APPROVAL banner describes a request at the moment it was queued. Once that
+ * request is decided elsewhere (Approvals tab), replace the stale banner with its current state.
+ */
+export function currentSimulationMessage(message, simulations = []) {
+  if (!message?.approvalId) return message;
+  const req = simulations.find((s) => s.id === message.approvalId);
+  if (!req || req.status === 'PENDING') return message;
+  switch (req.status) {
+    case 'APPROVED':
+      return { tone: 'success', text: 'Approved. Click "Run approved change" below to run it once.' };
+    case 'REJECTED':
+      return { tone: 'warning', text: 'The approver rejected this request. Nothing was changed.' };
+    case 'EXPIRED':
+      return { tone: 'warning', text: 'This request expired before it ran. Nothing was changed.' };
+    default:
+      return null; // EXECUTED / FAILED: the table row now shows the outcome.
+  }
+}
+
+/** One-line caps summary. The gate asks for approval only when a call touches MORE than the threshold. */
+export function capsSummary(policy) {
+  const n = policy.bulkApprovalThreshold;
+  return [
+    `More than ${n} ${n === 1 ? 'issue' : 'issues'} in one call need approval`,
+    `max ${policy.maxTargetsPerCall} per call`,
+    `${policy.perActorHourlyLimit}/h and ${policy.perActorDailyLimit}/day per user`,
+    `${policy.siteDailyLimit}/day per site`,
+  ].join(' · ');
 }

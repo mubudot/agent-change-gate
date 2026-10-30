@@ -3,7 +3,7 @@
 import React, { useRef, useState } from 'react';
 import { Button, DynamicTable, Heading, Inline, Lozenge, SectionMessage, Stack, Strong, Text, Textfield } from '@forge/react';
 import { invoke } from '@forge/bridge';
-import { changeSummary, operationLabel, relativeTime, simulationMessage, targetList } from '../format.js';
+import { changeSummary, currentSimulationMessage, operationLabel, relativeTime, simulationMessage, targetList } from '../format.js';
 import { Card, Feedback, StatusLozenge } from './ui.jsx';
 
 const PRESETS = [
@@ -103,7 +103,7 @@ export function Simulator({ data, reload }) {
             </Text>
           </SectionMessage>
         )}
-        <Feedback message={message} />
+        <Feedback message={currentSimulationMessage(message, data.simulations)} />
         {rows.length > 0 && <DynamicTable head={HEAD} rows={rows} rowsPerPage={5} />}
       </Stack>
     </Card>

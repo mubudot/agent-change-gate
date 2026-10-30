@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, Heading, Inline, Lozenge, SectionMessage, Stack, Tag, TagGroup, Text, TextArea, User, UserGroup } from '@forge/react';
 import { invoke } from '@forge/bridge';
+import { capsSummary } from '../format.js';
 import { Card, Feedback, Section, resultMessage } from './ui.jsx';
 
 function Row({ label, children }) {
@@ -29,7 +30,7 @@ function PolicySummary({ policy }) {
         <Row label="Protected statuses:"><Tags items={policy.protectedStatuses} empty="none" /></Row>
         <Row label="Protected fields:"><Tags items={policy.protectedFields} empty="none" /></Row>
         <Row label="Caps:">
-          <Text>{`${policy.bulkApprovalThreshold}+ issues need approval · max ${policy.maxTargetsPerCall} per call · ${policy.perActorHourlyLimit}/h and ${policy.perActorDailyLimit}/day per user · ${policy.siteDailyLimit}/day per site`}</Text>
+          <Text>{capsSummary(policy)}</Text>
         </Row>
         <Row label="Approvers:">
           {policy.approvers?.length ? (
