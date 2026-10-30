@@ -100,15 +100,18 @@ export class TeamworkGraphClient {
 
   /**
    * @param {string[]} issueIds numeric Jira issue ids
-   * @returns {Promise<{byIssue: Record<string, {goals:any[], pullRequests:any[], deployments:any[], truncated:string[]}>, errors: string[]}>}
+   * @returns {Promise<{byIssue: Record<string, {goals:any[], pullRequests:any[], deployments:any[], truncated:string[]}>, errors: string[], answered: string[]}>}
    *   truncated lists families with more than one page; the collector reports them as gaps.
+   *   answered lists the families whose query actually returned data (provenance: a family that
+   *   was never asked or failed is not a checked source).
    */
   async workItemContext(issueIds) {
     const ids = [...new Set(issueIds.map(String))].filter((id) => ISSUE_ID.test(id));
     const byIssue = Object.fromEntries(ids.map((id) => [id, { goals: [], pullRequests: [], deployments: [], truncated: [] }]));
-    if (!ids.length) return { byIssue, errors: [] };
-    if (!this.available) return { byIssue, errors: ['Teamwork Graph: no site id in the Forge context'] };
+    if (!ids.length) return { byIssue, errors: [], answered: [] };
+    if (!this.available) return { byIssue, errors: ['Teamwork Graph: no site id in the Forge context'], answered: [] };
     const errors = [];
+    const answered = [];
     await Promise.all(
       Object.keys(FAMILIES).map(async (fam) => {
         const { query, variables } = buildFamilyQuery(fam, this.cloudId, ids);
@@ -125,15 +128,18 @@ export class TeamworkGraphClient {
           return;
         }
         if (r.data.errors?.length) errors.push(`Teamwork Graph ${fam}: ${graphError(r)}`);
+        let got = false;
         ids.forEach((id, i) => {
           const edges = data[`i${i}`]?.edges;
           if (!Array.isArray(edges)) return;
+          got = true;
           byIssue[id][fam] = edges.map((e) => e?.node).filter(Boolean).map(FAMILIES[fam].parse);
           if (data[`i${i}`]?.pageInfo?.hasNextPage === true) byIssue[id].truncated.push(fam);
         });
+        if (got) answered.push(fam);
       }),
     );
-    return { byIssue, errors };
+    return { byIssue, errors, answered: Object.keys(FAMILIES).filter((f) => answered.includes(f)) };
   }
 }
 

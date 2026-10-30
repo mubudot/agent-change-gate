@@ -99,6 +99,7 @@ export function fakeGraph(byIssueId = {}, { errors = [], fail = false } = {}) {
       return {
         byIssue: Object.fromEntries(ids.map((id) => [id, byIssueId[id] ?? { goals: [], pullRequests: [], deployments: [] }])),
         errors,
+        answered: errors.length >= 3 ? [] : ['goals', 'pullRequests', 'deployments'].slice(0, 3 - errors.length),
       };
     },
   };

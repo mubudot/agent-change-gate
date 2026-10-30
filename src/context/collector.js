@@ -46,11 +46,11 @@ export async function collectContext(op, plan, cfg, { jira, graph, now }) {
       try {
         res = await graph.workItemContext(targets.map((t) => t.issueId));
       } catch (e) {
-        res = { byIssue: {}, errors: [`Teamwork Graph: ${String(e?.message ?? e).slice(0, 200)}`] };
+        res = { byIssue: {}, errors: [`Teamwork Graph: ${String(e?.message ?? e).slice(0, 200)}`], answered: [] };
       }
       for (const message of res.errors ?? []) gaps.push({ source: graphSource, graph: true, message });
-      const answered = Object.keys(res.byIssue ?? {}).length > 0 && (res.errors ?? []).length < 3;
-      if (answered) sources.add(graphSource);
+      // Provenance: list Teamwork Graph as a checked source only when at least one query returned data.
+      if (Array.isArray(res.answered) && res.answered.length > 0) sources.add(graphSource);
       for (const t of targets) {
         const facts = res.byIssue?.[t.issueId];
         signals.push(...withId(t, graphSignals(t.issueKey, facts, graphSource)));

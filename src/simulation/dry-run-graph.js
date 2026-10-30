@@ -12,6 +12,6 @@ export class DryRunGraph {
 
   async workItemContext(issueIds) {
     const facts = { goals: this.context?.goals ?? [], pullRequests: this.context?.pullRequests ?? [], deployments: this.context?.deployments ?? [] };
-    return { byIssue: Object.fromEntries(issueIds.map((id) => [String(id), facts])), errors: [] };
+    return { byIssue: Object.fromEntries(issueIds.map((id) => [String(id), facts])), errors: [], answered: ['goals', 'pullRequests', 'deployments'] };
   }
 }

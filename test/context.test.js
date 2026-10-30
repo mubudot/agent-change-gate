@@ -104,6 +104,7 @@ test('graph client parses results; a failing family only loses its own signals',
   assert.deepEqual(r.byIssue['10001'].deployments, []);
   assert.equal(r.errors.length, 1);
   assert.match(r.errors[0], /deployments: Cannot query field/);
+  assert.deepEqual(r.answered, ['goals', 'pullRequests'], 'only families that returned data count as answered');
 });
 
 test('graph client without a site id, and transport failures, are reported as gaps', async () => {
@@ -113,6 +114,8 @@ test('graph client without a site id, and transport failures, are reported as ga
   const broken = new TeamworkGraphClient(async () => { throw new Error('socket hang up'); }, CLOUD);
   const r = await broken.workItemContext(['1']);
   assert.equal(r.errors.length, 3);
+  assert.deepEqual(r.answered, []);
+  assert.deepEqual((await none.workItemContext(['1'])).answered, []);
   const ok = new TeamworkGraphClient(async () => ({ status: 200, data: { data: { echo: 'ok' } } }), CLOUD);
   assert.deepEqual(await ok.ping(), { ok: true });
 });
@@ -413,4 +416,20 @@ test('dashboard makes no Teamwork Graph call when the policy does not use it', a
     await env.svc.dashboard(ALICE);
   }
   assert.equal(pings, 0);
+});
+
+test('missing site id: Teamwork Graph is a gap, not a checked source (provenance)', async () => {
+  const graph = new TeamworkGraphClient(async () => { throw new Error('unexpected call'); }, null);
+  const env = await setup({ graph, policy: { contextRisk: { onGraphUnavailable: 'approve' } } });
+  const r = await env.svc.issueContext({ issueKeys: 'DEMO-1' }, ALICE);
+  assert.ok(!r.sources.includes('teamwork-graph'), `sources: ${r.sources}`);
+  assert.ok(r.gaps.some((g) => /no site id/.test(g)));
+});
+
+test('all graph families failing: Teamwork Graph is not listed as a source', async () => {
+  const graph = new TeamworkGraphClient(async () => ({ status: 500, data: null }), CLOUD);
+  const env = await setup({ graph, policy: { contextRisk: { onGraphUnavailable: 'approve' } } });
+  const r = await env.svc.issueContext({ issueKeys: 'DEMO-1' }, ALICE);
+  assert.ok(!r.sources.includes('teamwork-graph'));
+  assert.equal(r.gaps.filter((g) => /Teamwork Graph/.test(g)).length, 3);
 });
