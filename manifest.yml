@@ -1,5 +1,5 @@
 # Agent Change Gate - Forge manifest.
-# app.id is a placeholder until `forge register` runs (needs an Atlassian login).
+# app.id was assigned by `forge register` (run from the forge GitHub workflow).
 app:
   id: ari:cloud:ecosystem::app/67a2afa4-d23d-4d5b-a9b7-1cf01c63defe
   runtime:
