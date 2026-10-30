@@ -16,7 +16,7 @@ Local implementation only. Not registered, deployed, installed, or submitted. No
 | P2 | Pending deduplication depended on the first 100 eventually consistent query results; expired/other users' entries could hide active requests. | Strong point index for deduplication; queue scans cursor pages and filters expiry/visibility before applying its display limit. |
 | P3 | Documentation overstated audit/cap guarantees and deletion always queuing; one scope was unused. | README, DESIGN, prompt and skill now describe dispatch intent, attempted-target counting, fixed buckets, scope of enforcement and refusal codes. Removed `read:jira-user`; documented mypermissions classic scope is `read:jira-work`. |
 
-Local checks: **87 tests passing** with `node --test test/*.test.js` on Node 22.23.3;
+Local checks: **88 tests passing** with `node --test test/*.test.js` on Node 22.23.3;
 `FORGE_CLI_DIR=../work/forge-cli node scripts/validate-manifest.cjs` passes against the bundled CLI schema.
 Unit tests exercise pure policy, approval flows, deterministic races, storage failures, Jira routing and SDK-adapter contracts.
 They do not execute the Forge runtime or mount UI Kit. The Forge dependencies are not installed in this checkout.
@@ -44,6 +44,16 @@ They do not execute the Forge runtime or mount UI Kit. The Forge dependencies ar
 - Submission still requires a deployed, installable app, judge installation link and setup instructions, public demo
   video and Devpost submission. The manifest/skill support the intended Agents/MCP bonus entries; live exposure,
   public source availability and any Runs on Atlassian badge are not verified. Teamwork Graph/Marketplace work is absent.
+
+## Live site notes (a free Jira Cloud test site, development)
+
+- 2026-10-30: global page showed only loading skeletons. Cause: root `react@19` while `@forge/react@12` renders
+  with `react-reconciler@0.29` and its own nested `react@18`; the dashboard's hooks ran on a different React copy,
+  so the UI Kit app threw before its first render and no `getDashboard` resolver invocation was ever logged.
+  Fixed by pinning `react@^18.3.1` (single deduped copy) and committing `package-lock.json`; `test/deps.test.js`
+  guards the React major. Deployed as development v2.2.0 (same scopes, no reinstall). The `logs` workflow action
+  (`forge logs -e development --since 1h --limit 200`) is how to read resolver errors.
+- Still to confirm by loading the page: dashboard renders and `getDashboard` succeeds in `forge logs`.
 
 ## Verify on a real site
 
