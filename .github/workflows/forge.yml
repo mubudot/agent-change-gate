@@ -6,7 +6,7 @@ on:
         description: Forge action
         required: true
         type: choice
-        options: [whoami, register, deploy, install]
+        options: [whoami, register, deploy, install, logs]
       site:
         description: Atlassian site for install (e.g. example.atlassian.net)
         required: false
@@ -60,3 +60,6 @@ jobs:
           test -n "$SITE" || { echo "site input required"; exit 1; }
           npx --yes @forge/cli@15 install --site "$SITE" --product jira -e development --non-interactive --confirm-scopes \
             || npx --yes @forge/cli@15 install --site "$SITE" --product jira -e development --non-interactive --upgrade --confirm-scopes
+      - name: logs
+        if: inputs.action == 'logs'
+        run: npx --yes @forge/cli@15 logs -e development --since 1h --limit 200
