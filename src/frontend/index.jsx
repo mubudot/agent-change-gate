@@ -2,7 +2,7 @@
 // read the audit log, and (Jira admins) edit the policy or hit the kill switch.
 // Everything on the page comes from ONE resolver call (getDashboard).
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import ForgeReconciler, { Box, Button, Heading, Inline, SectionMessage, Spinner, Stack, Tab, TabList, TabPanel, Tabs, Text } from '@forge/react';
+import ForgeReconciler, { Box, Button, Inline, SectionMessage, Spinner, Stack, Tab, TabList, TabPanel, Tabs, Text } from '@forge/react';
 import { invoke } from '@forge/bridge';
 import { countPending } from './format.js';
 import { Summary } from './components/Summary.jsx';
@@ -54,13 +54,10 @@ function App() {
 
   const pending = countPending(data.requests);
   return (
-    <Box padding="space.300">
+    <Box paddingInline="space.300" paddingBlockEnd="space.300">
       <Stack space="space.300">
         <Inline spread="space-between" alignBlock="center" shouldWrap>
-          <Stack space="space.050">
-            <Heading size="large">Agent Change Gate</Heading>
-            <Text>Every Jira write an AI agent makes through this app passes a deterministic policy check first.</Text>
-          </Stack>
+          <Text>Every Jira write an AI agent makes through this app passes a deterministic policy check first.</Text>
           <Button appearance="subtle" isDisabled={loading} onClick={load}>{loading ? 'Refreshing…' : 'Refresh'}</Button>
         </Inline>
         {error && <SectionMessage appearance="warning"><Text>{`Refresh failed, showing earlier data: ${error}`}</Text></SectionMessage>}
