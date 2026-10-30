@@ -88,7 +88,7 @@ They do not execute the Forge runtime or mount UI Kit. The Forge dependencies ar
   TTL. Its lock change (TTL-only, no takeover) was replaced by the bucketed lease above because unswept keys block
   `FAIL_IF_EXISTS` for up to 48 h.
 - 2026-10-30: user confirmed the page works on dev v2.6.0.
-- 2026-10-30 18:xx: **Simulate an agent request** (admin-only card on the Approvals tab) so the page shows real gate
+- 2026-10-30 17:59 (bb63a07, dev v2.7.0, forge lint clean, no reinstall): **Simulate an agent request** (admin-only card on the Approvals tab) so the page shows real gate
   data without Rovo. Three presets (low-risk comment → ALLOW, transition into first protected status →
   NEEDS_APPROVAL, `maxTargetsPerCall + 1` bulk transition → DENY) go through `GateService.guardedChange` with
   `source: 'simulated'` on requests and audit entries. No issue key = dry run bound to `DryRunJira` (synthetic
