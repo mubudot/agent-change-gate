@@ -299,21 +299,20 @@ export class GateService {
     // Page-load latency: two parallel stages instead of six sequential round-trips, and one
     // Jira permission call (isApprover reuses the admin answer when no approvers are listed).
     const now = this.now();
-    const graphWanted = (policy) => policy.contextRisk.enabled && policy.contextRisk.useTeamworkGraph;
-    const [{ policy, errors }, isAdmin, ping] = await Promise.all([
-      this.repo.loadPolicy(),
-      this.jira.isJiraAdmin(),
-      // Started in parallel for latency; bounded by the graph client's own deadline.
-      this.graph ? this.graph.ping() : { ok: false, error: 'not configured' },
-    ]);
-    const graphStatus = graphWanted(policy) ? ping : { ok: false, error: 'not used by the current policy' };
+    const [{ policy, errors }, isAdmin] = await Promise.all([this.repo.loadPolicy(), this.jira.isJiraAdmin()]);
+    // Only ping Teamwork Graph when the policy uses it (bounded by the client's own deadline).
+    const graphWanted = policy.contextRisk.enabled && policy.contextRisk.useTeamworkGraph;
+    const graphPing = !graphWanted
+      ? Promise.resolve({ ok: false, error: 'not used by the current policy' })
+      : this.graph ? this.graph.ping() : Promise.resolve({ ok: false, error: 'not configured' });
     const approver = policy.approvers.length ? policy.approvers.includes(actor) : isAdmin;
     const seesAll = approver || isAdmin;
-    const [requests, audit, usage, simulations] = await Promise.all([
+    const [requests, audit, usage, simulations, graphStatus] = await Promise.all([
       this.repo.listOpenRequests(50, now, seesAll ? undefined : actor),
       seesAll ? this.repo.listAudit(50) : this.repo.listAuditForActor(actor, 50),
       this.repo.getUsage('-', now, policy.timezone),
       isAdmin ? this.repo.listSimulations(10, now) : [],
+      graphPing,
     ]);
     return {
       actor,
@@ -428,23 +427,16 @@ function sameOrigin(req, origin) {
  * Reasons a human has not yet approved. Non-context reasons compare by code (rate codes are
  * exempt: usage moves between request and run). Context reasons compare per issue and signal,
  * so a second target that joined a release since approval is a new risk even though the code
- * CONTEXT_RELEASE_SOON was already approved for the first. CONTEXT_UNAVAILABLE is tolerated only
- * when the approver reviewed a checked context (a later outage must not strand the change), never
- * when context checks were off at request time.
+ * CONTEXT_RELEASE_SOON was already approved for the first. CONTEXT_UNAVAILABLE is a new risk unless
+ * the approver approved an unavailable context: fail closed, a run-time outage asks for a new approval.
  */
 function newRisksSince(stored, reasons, context) {
   const approvedCodes = new Set(stored.reasons.map((r) => r.code));
   const reviewed = stored.context ? new Set((stored.context.signals ?? []).map(signalKey)) : null;
-  // Outage tolerance only where the approver actually reviewed Teamwork Graph context.
-  const graphReviewed = (stored.context?.sources ?? []).some((s) => s === 'teamwork-graph' || s === 'simulated');
   const out = [];
   for (const r of reasons) {
     if (RATE_CODES.has(r.code)) continue;
-    if (r.code === 'CONTEXT_UNAVAILABLE') {
-      if (!graphReviewed && !approvedCodes.has(r.code)) out.push(r);
-      continue;
-    }
-    if (!r.code.startsWith('CONTEXT_')) {
+    if (!r.code.startsWith('CONTEXT_') || r.code === 'CONTEXT_UNAVAILABLE') {
       if (!approvedCodes.has(r.code)) out.push(r);
       continue;
     }

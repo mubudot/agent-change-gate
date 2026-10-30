@@ -44,7 +44,8 @@ resolves it, and each signal can only **raise** the verdict (policy `contextRisk
 - Approvers see count-only texts ("linked to 1 active goal"); goal, PR, deployment and blocked-issue names are returned
   only to the requesting user, whose permissions were used to read them.
 - An approval covers the context the approver saw: at run time the gate re-reads context, and any new
-  issue + signal pair (for example a second target that joined a release) is a `NEW_RISK` refusal.
+  issue + signal pair (for example a second target that joined a release) is a `NEW_RISK` refusal, and so is a
+  context outage at run time unless the approver approved exactly that (fail closed).
 - Graph errors or more than 25 linked items are reported as gaps; `onGraphUnavailable: "approve"` turns them into a
   human check (default `ignore`: Jira context still applies). Missing Jira facts always need a human.
 - New read-only tool **`acg-issue-context`** ("What could go wrong if you move this issue?") shows what the gate sees.
@@ -68,7 +69,7 @@ resolves it, and each signal can only **raise** the verdict (policy `contextRisk
 ```bash
 node --version   # tests require Node >= 22; the Forge CLI may require a newer patch
 npm ci
-node --test test/*.test.js        # 145 tests, no Atlassian account or network needed
+node --test test/*.test.js        # 147 tests, no Atlassian account or network needed
 # optional: validate manifest.yml against the schema bundled with a local Forge CLI checkout
 # (npm i -g @forge/cli, then point FORGE_CLI_DIR at its install directory)
 FORGE_CLI_DIR=<path-to-@forge/cli> node scripts/validate-manifest.cjs

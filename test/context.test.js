@@ -203,7 +203,7 @@ test('context that appears after approval is a NEW_RISK at run time', async () =
   assert.equal(env.writes().length, 0);
 });
 
-test('approved context risk runs once; a graph outage at run time does not strand it', async () => {
+test('a graph outage at run time asks for a new approval (fail closed)', async () => {
   const graph = fakeGraph();
   const env = await contextEnv({ graph, policy: { contextRisk: { onGraphUnavailable: 'approve' } } });
   const r = await env.svc.guardedChange('jira.issue.transition', { issueKeys: 'DEMO-2', toStatus: 'In Review' }, ALICE);
@@ -213,7 +213,9 @@ test('approved context risk runs once; a graph outage at run time does not stran
   graph.workItemContext = async () => { throw new Error('graph down'); };
   env.as(ALICE);
   const run = await env.svc.runApproved(r.approvalId, ALICE);
-  assert.equal(run.status, 'EXECUTED');
+  assert.equal(run.code, 'NEW_RISK');
+  assert.deepEqual(run.reasons.map((x) => x.code), ['CONTEXT_UNAVAILABLE']);
+  assert.equal(env.writes().length, 0);
 });
 
 test('graph outage: ignored by default, needs a human when policy says so', async () => {
@@ -385,4 +387,30 @@ test('a stalled Teamwork Graph becomes a gap within the deadline, and ping is bo
 test('dashboard does not report graph status when the policy does not use it', async () => {
   const env = await contextEnv({ policy: { contextRisk: { useTeamworkGraph: false } } });
   assert.equal((await env.svc.dashboard(ALICE)).graphStatus.ok, false);
+});
+
+// ---------- review fixes (Codex round 3) ----------
+
+test('tightening onGraphUnavailable after a successful read still refuses a later outage', async () => {
+  const graph = fakeGraph();
+  const env = await contextEnv({ graph, policy: { protectedStatuses: ['In Progress'] } });
+  const r = await env.svc.guardedChange('jira.issue.transition', { issueKeys: 'DEMO-1', toStatus: 'In Progress' }, ALICE);
+  assert.equal(r.status, 'PENDING_APPROVAL');
+  env.as(BOB);
+  await env.svc.decideRequest(r.approvalId, true, undefined, BOB);
+  await env.svc.savePolicy({ allowedProjects: ['DEMO'], requireDistinctApprover: false, protectedStatuses: ['In Progress'], contextRisk: { onGraphUnavailable: 'approve' } }, BOB);
+  graph.workItemContext = async () => { throw new Error('graph down'); };
+  env.as(ALICE);
+  assert.equal((await env.svc.runApproved(r.approvalId, ALICE)).code, 'NEW_RISK');
+});
+
+test('dashboard makes no Teamwork Graph call when the policy does not use it', async () => {
+  const graph = fakeGraph();
+  let pings = 0;
+  graph.ping = async () => { pings++; return { ok: true }; };
+  for (const contextRisk of [{ enabled: false }, { useTeamworkGraph: false }]) {
+    const env = await contextEnv({ graph, policy: { contextRisk } });
+    await env.svc.dashboard(ALICE);
+  }
+  assert.equal(pings, 0);
 });
