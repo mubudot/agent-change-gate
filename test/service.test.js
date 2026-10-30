@@ -215,6 +215,7 @@ test('dashboard preserves explicit approver semantics even for Jira administrato
   assert.equal(approver.isAdmin, false);
   assert.equal(approver.isApprover, true);
   assert.deepEqual(Object.keys(approver).sort(), [
-    'actor', 'isApprover', 'isAdmin', 'policy', 'policyErrors', 'requests', 'audit', 'siteUsageToday',
+    'actor', 'isApprover', 'isAdmin', 'policy', 'policyErrors', 'requests', 'audit', 'siteUsageToday', 'simulations',
   ].sort());
+  assert.deepEqual(approver.simulations, [], 'non-admins never receive the simulation list');
 });

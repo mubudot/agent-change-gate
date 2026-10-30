@@ -1,6 +1,7 @@
 # Status
 
-Local implementation only. Not registered, deployed, installed, or submitted. No live-site behavior is claimed.
+Deployed to the Forge development environment and installed on a free Jira Cloud test site (Jira global page loads).
+Not submitted. Rovo agent / MCP behaviour is not yet verified on a Rovo-enabled site.
 
 ## Review (2026-10-30)
 
@@ -86,7 +87,18 @@ They do not execute the Forge runtime or mount UI Kit. The Forge dependencies ar
   discard); stale overlapping reloads ignored; double submits blocked in review and policy save; MemoryStore models
   TTL. Its lock change (TTL-only, no takeover) was replaced by the bucketed lease above because unswept keys block
   `FAIL_IF_EXISTS` for up to 48 h.
-- Still to confirm by loading the page: dashboard renders and `getDashboard` succeeds in `forge logs`.
+- 2026-10-30: user confirmed the page works on dev v2.6.0.
+- 2026-10-30 18:xx: **Simulate an agent request** (admin-only card on the Approvals tab) so the page shows real gate
+  data without Rovo. Three presets (low-risk comment → ALLOW, transition into first protected status →
+  NEEDS_APPROVAL, `maxTargetsPerCall + 1` bulk transition → DENY) go through `GateService.guardedChange` with
+  `source: 'simulated'` on requests and audit entries. No issue key = dry run bound to `DryRunJira` (synthetic
+  `<project>-9001` issues, no-op writes), re-applied in `run()` on every entry point. Running a simulated request needs
+  a Jira admin on every entry point (incl. Rovo `run-approved-change`). Separate dedup keys per origin; approved
+  simulations stay listed (`simok:` index) until run. Two-person rule unchanged: solo demos set
+  `requireDistinctApprover: false`. Codex review: work/codex_codegeist_demo.md (3 P2 + 1 P3, all fixed with tests).
+  115 tests. Manifest/scopes unchanged.
+- Rovo off: installation succeeds and only Rovo features are missing (Atlassian dev-community answer, linked in
+  README); confirmed by our own install on the test site. The global page, policy, audit and simulation panel do not use Rovo.
 
 ## Verify on a real site
 

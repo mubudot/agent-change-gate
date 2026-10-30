@@ -5,6 +5,7 @@ import {
   CodeBlock,
   DynamicTable,
   Inline,
+  Lozenge,
   Modal,
   ModalBody,
   ModalFooter,
@@ -20,8 +21,9 @@ import {
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 import { approvalDetails } from '../approval-details.js';
-import { changeSummary, formatTime, operationLabel, relativeTime, targetList } from '../format.js';
+import { changeSummary, formatTime, operationLabel, relativeTime, sourceLabel, targetList } from '../format.js';
 import { EmptyNotice, Feedback, Section, StatusLozenge, resultMessage } from './ui.jsx';
+import { Simulator } from './Simulator.jsx';
 
 const HEAD = {
   cells: [
@@ -74,6 +76,11 @@ function ReviewModal({ request, data, onClose, onDecided }) {
             <User accountId={request.requester} />
             <Text>{`${relativeTime(request.createdAt)} · expires ${relativeTime(request.expiresAt)}`}</Text>
           </Inline>
+          {request.source === 'simulated' && (
+            <SectionMessage appearance="information" title={sourceLabel(request)}>
+              <Text>An admin created this request with the demo panel. It went through the same gate as an agent request.</Text>
+            </SectionMessage>
+          )}
           <SectionMessage appearance="warning" title="Why this needs a human">
             <Text>{request.reasons.map((x) => x.message).join(' · ') || 'Policy requires approval.'}</Text>
           </SectionMessage>
@@ -113,7 +120,15 @@ export function Approvals({ data, loading, reload }) {
     cells: [
       { key: 'requested', content: <Stack space="space.0"><Text>{formatTime(r.createdAt)}</Text><Text size="small" color="color.text.subtlest">{relativeTime(r.createdAt, now)}</Text></Stack> },
       { key: 'requester', content: <User accountId={r.requester} /> },
-      { key: 'change', content: <Stack space="space.0"><Strong>{operationLabel(r.op.kind)}</Strong><Text size="small">{changeSummary(r.op)}</Text></Stack> },
+      {
+        key: 'change',
+        content: (
+          <Stack space="space.0">
+            <Inline space="space.050" alignBlock="center"><Strong>{operationLabel(r.op.kind)}</Strong>{r.source === 'simulated' && <Lozenge>{sourceLabel(r)}</Lozenge>}</Inline>
+            <Text size="small">{changeSummary(r.op)}</Text>
+          </Stack>
+        ),
+      },
       { key: 'issues', content: <Text>{targetList(r.op.targets)}</Text> },
       { key: 'why', content: <Text size="small">{r.reasons.map((x) => x.message).join(' · ')}</Text> },
       { key: 'status', content: <StatusLozenge status={r.status} /> },
@@ -130,6 +145,7 @@ export function Approvals({ data, loading, reload }) {
 
   return (
     <Section>
+      {data.isAdmin && <Simulator data={data} reload={reload} />}
       <Feedback message={message} />
       {!data.isApprover && (
         <SectionMessage appearance="information">

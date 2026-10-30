@@ -9,6 +9,9 @@ const LOCK_PREFIX = 'mutation-lock:';
 export const LOCK_BUCKET_MS = 120_000;
 export const LOCK_LEASE_MS = 60_000; // > Forge's 25 s default invocation limit, < LOCK_BUCKET_MS
 const actorKey = (actor) => createHash('sha256').update(actor).digest('hex');
+// Dedup index per origin: agent requests keep the original key; simulations get their own, so the two never collide.
+const pendingKey = (requester, fingerprint, origin) =>
+  origin?.source === 'simulated' ? `pending:${requester}:${fingerprint}:sim:${origin.simulation?.mode ?? 'dry-run'}` : `pending:${requester}:${fingerprint}`;
 
 export class Repo {
   constructor(store) {
@@ -107,20 +110,25 @@ export class Repo {
     }
     await this.store.set(`req:${req.id}`, req);
     // Index of open requests for the approval dashboard.
-    const pendingKey = `pending:${req.requester}:${req.fingerprint}`;
+    const dedupKey = pendingKey(req.requester, req.fingerprint, req);
     if (req.status === Status.PENDING) {
       await this.store.set(`open:${req.id}`, req.createdAt);
-      await this.store.set(pendingKey, req.id);
+      await this.store.set(dedupKey, req.id);
     } else {
       await this.store.delete(`open:${req.id}`);
-      if (await this.store.get(pendingKey) === req.id) await this.store.delete(pendingKey);
+      if (await this.store.get(dedupKey) === req.id) await this.store.delete(dedupKey);
+    }
+    // Approved simulations stay reachable from the demo panel until run, rejected or expired.
+    if (req.source === 'simulated') {
+      if (req.status === Status.APPROVED) await this.store.set(`simok:${req.id}`, req.id, { ttlSeconds: 8 * 86400 });
+      else await this.store.delete(`simok:${req.id}`);
     }
   }
 
-  async findPending(actor, fingerprint, now) {
+  async findPending(actor, fingerprint, now, origin) {
     // Point lookups are strongly consistent; KVS queries are not suitable for
     // deduplication and must never decide whether a request is authorized.
-    const id = await this.store.get(`pending:${actor}:${fingerprint}`);
+    const id = await this.store.get(pendingKey(actor, fingerprint, origin));
     const req = await this.getRequest(id);
     return req && withExpiry(req, now).status === Status.PENDING ? req : undefined;
   }
@@ -142,6 +150,20 @@ export class Repo {
   /** Atomic single-use claim. Returns true for exactly one caller per request id. */
   async claimExecution(id, actor, nowMs) {
     return this.store.set(`claim:${id}`, { actor, at: nowMs }, { failIfExists: true });
+  }
+
+  // ---- simulated-request index for the admin demo panel (newest first) ----
+  async indexSimulation(id, nowMs) {
+    const inverted = String(MAX_TS - nowMs).padStart(13, '0');
+    await this.store.set(`sim:${inverted}:${id}`, id, { ttlSeconds: 7 * 86400 });
+  }
+
+  /** The most recent simulations plus every still-approved one (so its Run button never disappears). */
+  async listSimulations(limit = 10, now = Date.now()) {
+    const [recent, approved] = await Promise.all([this.store.list('sim:', limit), this.store.list('simok:', 50)]);
+    const ids = [...new Set([...recent, ...approved].map((e) => e.value))];
+    const reqs = (await Promise.all(ids.map((id) => this.getRequest(id)))).filter(Boolean).map((r) => withExpiry(r, now));
+    return reqs.sort((a, b) => b.createdAt - a.createdAt);
   }
 
   // ---- audit log (newest first by key order) ----

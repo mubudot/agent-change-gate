@@ -9,6 +9,10 @@ export function resolverDefinitions(getService) {
     decide: ({ payload, context }) =>
       getService().decideRequest(String(payload?.approvalId ?? ''), payload?.approve === true, payload?.note, context.accountId),
     savePolicy: ({ payload, context }) => getService().savePolicy(payload?.policy, context.accountId),
+    // Admin-only demo: push a preset request through the same gate the Rovo/MCP actions use.
+    simulate: ({ payload, context }) =>
+      getService().simulate(String(payload?.preset ?? ''), typeof payload?.issueKey === 'string' ? payload.issueKey : undefined, context.accountId),
+    runSimulated: ({ payload, context }) => getService().runSimulated(String(payload?.approvalId ?? ''), context.accountId),
   };
 }
 

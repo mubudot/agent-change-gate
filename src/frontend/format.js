@@ -71,3 +71,31 @@ export function changeSummary(op) {
 }
 
 export const countPending = (requests = []) => requests.filter((r) => r.status === 'PENDING').length;
+
+/** Who started a gate decision: an agent (Rovo/MCP), the admin demo panel, or an admin. */
+export function sourceLabel(entry) {
+  if (entry?.source === 'simulated') return entry.dryRun || entry.simulation?.mode === 'dry-run' ? 'Simulated (dry run)' : 'Simulated (live)';
+  if (entry?.source === 'admin' || entry?.kind === 'policy.update') return 'Admin';
+  return 'Agent';
+}
+
+/** Feedback text for a simulate / runSimulated result. tone: success | warning | error | information. */
+export function simulationMessage(r) {
+  const why = (r?.reasons ?? []).map((x) => x.message).join(' · ');
+  const dry = r?.dryRun ? ' Dry run: Jira was not changed.' : '';
+  switch (r?.status) {
+    case 'EXECUTED':
+      return { tone: 'success', text: `Gate verdict ALLOW: the change ran.${dry}` };
+    case 'PARTIAL':
+    case 'FAILED':
+      return { tone: 'warning', text: `The gate allowed it but Jira refused some writes: ${(r.results ?? []).filter((x) => !x.ok).map((x) => `${x.key}: ${x.error}`).join('; ')}` };
+    case 'PENDING_APPROVAL':
+      return { tone: 'information', text: `Gate verdict NEEDS APPROVAL (${why}). It is waiting in the approvals table; nothing was changed.` };
+    case 'DENIED':
+      return { tone: 'error', text: `Gate verdict DENY: ${why}. Nothing was changed.` };
+    case 'REFUSED':
+      return { tone: 'warning', text: r.message || `Refused (${r.code}).` };
+    default:
+      return { tone: 'warning', text: (r?.errors ?? []).join('; ') || r?.message || 'The request was not completed.' };
+  }
+}

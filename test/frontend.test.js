@@ -40,3 +40,18 @@ test('dashboard display helpers', () => {
   assert.equal(changeSummary({ kind: 'jira.issue.edit', payload: { changes: { priority: 'High' } } }), 'Change priority');
   assert.equal(countPending([{ status: 'PENDING' }, { status: 'EXPIRED' }]), 1);
 });
+
+import { simulationMessage, sourceLabel } from '../src/frontend/format.js';
+
+test('simulation labels and feedback', () => {
+  assert.equal(sourceLabel({ source: 'simulated', dryRun: true }), 'Simulated (dry run)');
+  assert.equal(sourceLabel({ source: 'simulated', simulation: { mode: 'live' } }), 'Simulated (live)');
+  assert.equal(sourceLabel({ source: 'simulated', simulation: { mode: 'dry-run' } }), 'Simulated (dry run)');
+  assert.equal(sourceLabel({ kind: 'policy.update' }), 'Admin');
+  assert.equal(sourceLabel({}), 'Agent');
+  assert.match(simulationMessage({ status: 'EXECUTED', dryRun: true }).text, /Dry run/);
+  assert.equal(simulationMessage({ status: 'DENIED', reasons: [{ message: 'too many' }] }).tone, 'error');
+  assert.equal(simulationMessage({ status: 'PENDING_APPROVAL', reasons: [] }).tone, 'information');
+  assert.equal(simulationMessage({ status: 'REFUSED', code: 'NOT_ADMIN', message: 'only admins' }).text, 'only admins');
+  assert.match(simulationMessage({ status: 'INVALID', errors: ['bad key'] }).text, /bad key/);
+});
