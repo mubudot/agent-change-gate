@@ -60,7 +60,8 @@ jobs:
           # lint exits 1 on "approval" notices (e.g. a scope change means a major version);
           # real errors still fail the deploy below.
           npx --yes @forge/cli@15 lint || echo "lint reported issues (see above)"
-          npx --yes @forge/cli@15 deploy -e "$FORGE_ENV" --non-interactive
+          # A scope change is a major version; acknowledging it is required to deploy.
+          npx --yes @forge/cli@15 deploy -e "$FORGE_ENV" --non-interactive --approve MAJOR_VERSION_RULE
       - name: install
         if: inputs.action == 'install'
         env:
