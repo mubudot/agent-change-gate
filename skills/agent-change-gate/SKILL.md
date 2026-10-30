@@ -20,6 +20,23 @@ Every write tool returns a JSON object with a `status`. Act on it exactly:
 | `PREVIEW` | dry run (`preview: true`) | report the `verdict` and reasons |
 | `REFUSED` | gate or approval refuses the call (`code`) | `BUSY`: retry the same call later; other codes: explain and ask if a new request is needed |
 
+## Tools
+
+| tool | use it to |
+|---|---|
+| `acg-comment-issues` | add the same comment to one or more issues |
+| `acg-transition-issues` | move issues to a target status |
+| `acg-assign-issues` | assign or unassign issues |
+| `acg-edit-issues` | change summary, priority, due date or labels |
+| `acg-create-issue` | create one issue in an allowed project |
+| `acg-delete-issues` | request deletion (always creates an approval request) |
+| `acg-run-approved-change` | run a change a human approved, once, as its requester |
+| `acg-approval-status` | check whether an approval request was approved, rejected or expired |
+| `acg-my-activity` | list recent changes made or requested for the user, with verdicts |
+| `acg-policy-summary` | read allowed projects, caps and what needs approval |
+
+All write tools accept `preview: true` except `acg-run-approved-change`.
+
 ## Planning a change
 
 1. If the user did not name issues and is viewing one, omit `issueKeys`; the app uses the issue in view.
