@@ -1,7 +1,7 @@
 # Agent Change Gate - Forge manifest.
 # app.id is a placeholder until `forge register` runs (needs an Atlassian login).
 app:
-  id: ari:cloud:ecosystem::app/00000000-0000-0000-0000-000000000000
+  id: ari:cloud:ecosystem::app/67a2afa4-d23d-4d5b-a9b7-1cf01c63defe
   runtime:
     name: nodejs24.x
     memoryMB: 256
@@ -11,7 +11,8 @@ modules:
   rovo:agent:
     - key: change-gate-agent
       name: Change Gate Agent
-      description: Makes Jira changes for you, but only through a deterministic policy gate with caps, allowlists and human approval for risky or bulk changes.
+      description: Makes Jira changes for you, but only through a deterministic policy
+        gate with caps, allowlists and human approval for risky or bulk changes.
       prompt: resource:agent-prompt;agent-prompt.txt
       conversationStarters:
         - Comment on the issue I'm looking at
@@ -69,13 +70,16 @@ modules:
       name: Guarded - comment on issues
       function: fn-comment
       actionVerb: UPDATE
-      description: Add the same comment to one or more Jira issues through the change gate. Small changes run at once; large or risky ones return PENDING_APPROVAL and change nothing.
+      description: Add the same comment to one or more Jira issues through the change
+        gate. Small changes run at once; large or risky ones return
+        PENDING_APPROVAL and change nothing.
       inputs:
         issueKeys:
           title: "Issue keys"
           type: string
           required: false
-          description: "Comma-separated issue keys, e.g. DEMO-1,DEMO-2. Omit to use the issue the user is viewing."
+          description: "Comma-separated issue keys, e.g. DEMO-1,DEMO-2. Omit to use the
+            issue the user is viewing."
         body:
           title: "Comment"
           type: string
@@ -90,13 +94,16 @@ modules:
       name: Guarded - transition issues
       function: fn-transition
       actionVerb: UPDATE
-      description: Move one or more Jira issues to a target status through the change gate. Moving into protected statuses (such as Done) or many issues at once needs human approval.
+      description: Move one or more Jira issues to a target status through the change
+        gate. Moving into protected statuses (such as Done) or many issues at
+        once needs human approval.
       inputs:
         issueKeys:
           title: "Issue keys"
           type: string
           required: false
-          description: "Comma-separated issue keys. Omit to use the issue the user is viewing."
+          description: "Comma-separated issue keys. Omit to use the issue the user is
+            viewing."
         toStatus:
           title: "Target status"
           type: string
@@ -117,7 +124,8 @@ modules:
           title: "Issue keys"
           type: string
           required: false
-          description: "Comma-separated issue keys. Omit to use the issue the user is viewing."
+          description: "Comma-separated issue keys. Omit to use the issue the user is
+            viewing."
         assigneeAccountId:
           title: "Assignee account ID"
           type: string
@@ -132,13 +140,15 @@ modules:
       name: Guarded - edit issue fields
       function: fn-edit
       actionVerb: UPDATE
-      description: Change summary, priority, due date or labels of one or more Jira issues through the change gate. Protected fields need human approval.
+      description: Change summary, priority, due date or labels of one or more Jira
+        issues through the change gate. Protected fields need human approval.
       inputs:
         issueKeys:
           title: "Issue keys"
           type: string
           required: false
-          description: "Comma-separated issue keys. Omit to use the issue the user is viewing."
+          description: "Comma-separated issue keys. Omit to use the issue the user is
+            viewing."
         summary:
           title: "New summary"
           type: string
@@ -204,13 +214,15 @@ modules:
       name: Guarded - delete issues
       function: fn-delete
       actionVerb: DELETE
-      description: Request deletion of Jira issues. Deletion always needs a human approver; this call only creates the approval request.
+      description: Request deletion of Jira issues. Deletion always needs a human
+        approver; this call only creates the approval request.
       inputs:
         issueKeys:
           title: "Issue keys"
           type: string
           required: false
-          description: "Comma-separated issue keys. Omit to use the issue the user is viewing."
+          description: "Comma-separated issue keys. Omit to use the issue the user is
+            viewing."
         preview:
           title: "Preview only"
           type: boolean
@@ -220,7 +232,8 @@ modules:
       name: Run an approved change
       function: fn-run-approved
       actionVerb: TRIGGER
-      description: Run a change that a human approved. Only the user who requested it can run it, exactly once, and only if the policy still allows it.
+      description: Run a change that a human approved. Only the user who requested it
+        can run it, exactly once, and only if the policy still allows it.
       inputs:
         approvalId:
           title: "Approval ID"
@@ -231,7 +244,8 @@ modules:
       name: Check approval status
       function: fn-approval-status
       actionVerb: GET
-      description: Check whether one of your approval requests was approved, rejected or expired.
+      description: Check whether one of your approval requests was approved, rejected
+        or expired.
       inputs:
         approvalId:
           title: "Approval ID"
@@ -242,7 +256,8 @@ modules:
       name: My guarded agent activity
       function: fn-my-activity
       actionVerb: GET
-      description: List the most recent agent changes made or requested on your behalf, with gate verdicts.
+      description: List the most recent agent changes made or requested on your
+        behalf, with gate verdicts.
       inputs:
         limit:
           title: "Limit"
@@ -253,7 +268,8 @@ modules:
       name: Show agent change policy
       function: fn-policy-summary
       actionVerb: GET
-      description: Show the current agent change policy (allowed projects, caps, what needs approval) so you can plan changes that will pass.
+      description: Show the current agent change policy (allowed projects, caps, what
+        needs approval) so you can plan changes that will pass.
       inputs:
         detail:
           title: "Detail"
