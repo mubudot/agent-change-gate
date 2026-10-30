@@ -193,3 +193,12 @@ test('handlers take identity from context, not inputs, and fall back to the issu
   assert.equal((await h.myActivity({}, { accountId: ALICE })).entries[0].actor, ALICE);
   assert.equal((await h.commentIssues({ issueKeys: 'DEMO-1', body: 'x' }, {})).status, 'INVALID');
 });
+
+test('dashboard makes a single Jira permission call and returns the full page in one payload', async () => {
+  const env = await setup();
+  const before = env.jira.state.calls.filter((c) => c.path.includes('mypermissions')).length;
+  const d = await env.svc.dashboard(ALICE);
+  const after = env.jira.state.calls.filter((c) => c.path.includes('mypermissions')).length;
+  assert.equal(after - before, 1);
+  for (const k of ['actor', 'isApprover', 'isAdmin', 'policy', 'policyErrors', 'requests', 'audit', 'siteUsageToday']) assert.ok(k in d, k);
+});

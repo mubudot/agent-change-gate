@@ -20,3 +20,23 @@ test('human review includes requester, expiry and exact untruncated operation pa
   request.op.payload = { body: 'x'.repeat(32000) };
   assert.deepEqual(JSON.parse(approvalDetails(request)).payload, request.op.payload);
 });
+
+import { changeSummary, countPending, operationLabel, relativeTime, statusAppearance, targetList, verdictAppearance } from '../src/frontend/format.js';
+
+test('dashboard display helpers', () => {
+  assert.equal(operationLabel('jira.issue.delete'), 'Delete');
+  assert.equal(operationLabel('custom.kind'), 'custom.kind');
+  assert.equal(statusAppearance('PENDING'), 'moved');
+  assert.equal(statusAppearance('APPROVED'), 'success');
+  assert.equal(statusAppearance('REJECTED'), 'removed');
+  assert.equal(verdictAppearance('DENY'), 'removed');
+  assert.equal(relativeTime(0, 30_000), 'just now');
+  assert.equal(relativeTime(0, 5 * 60_000), '5 min ago');
+  assert.equal(relativeTime(3 * 3_600_000, 0), 'in 3 h');
+  assert.equal(targetList([{ issueKey: 'DEMO-1' }, { issueKey: null, projectKey: 'OPS' }]), 'DEMO-1, new issue in OPS');
+  assert.equal(targetList([]), '—');
+  assert.equal(changeSummary({ kind: 'jira.issue.transition', payload: { toStatus: 'Done' } }), 'Move to "Done"');
+  assert.equal(changeSummary({ kind: 'jira.issue.assign', payload: { assignee: null } }), 'Unassign');
+  assert.equal(changeSummary({ kind: 'jira.issue.edit', payload: { changes: { priority: 'High' } } }), 'Change priority');
+  assert.equal(countPending([{ status: 'PENDING' }, { status: 'EXPIRED' }]), 1);
+});

@@ -229,20 +229,26 @@ export class GateService {
 
   async dashboard(actor) {
     if (!actor) throw new GateError('NO_USER', 'no user context');
-    const { policy, errors } = await this.repo.loadPolicy();
-    const approver = await this.isApprover(actor, policy);
-    const isAdmin = await this.jira.isJiraAdmin();
+    // Page-load latency: two parallel stages instead of six sequential round-trips, and one
+    // Jira permission call (isApprover reuses the admin answer when no approvers are listed).
     const now = this.now();
-    const visible = await this.repo.listOpenRequests(50, now, approver || isAdmin ? undefined : actor);
+    const [{ policy, errors }, isAdmin] = await Promise.all([this.repo.loadPolicy(), this.jira.isJiraAdmin()]);
+    const approver = policy.approvers.length ? policy.approvers.includes(actor) : isAdmin;
+    const seesAll = approver || isAdmin;
+    const [requests, audit, usage] = await Promise.all([
+      this.repo.listOpenRequests(50, now, seesAll ? undefined : actor),
+      seesAll ? this.repo.listAudit(50) : this.repo.listAuditForActor(actor, 50),
+      this.repo.getUsage('-', now, policy.timezone),
+    ]);
     return {
       actor,
       isApprover: approver,
       isAdmin,
       policy,
       policyErrors: errors,
-      requests: visible,
-      audit: approver || isAdmin ? await this.repo.listAudit(50) : await this.repo.listAuditForActor(actor, 50),
-      siteUsageToday: (await this.repo.getUsage('-', now, policy.timezone)).siteDay,
+      requests,
+      audit,
+      siteUsageToday: usage.siteDay,
     };
   }
 

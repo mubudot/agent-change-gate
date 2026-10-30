@@ -1,0 +1,121 @@
+// Policy tab: readable summary for everyone, JSON editor and kill switch for Jira admins.
+import React, { useState } from 'react';
+import { Button, Heading, Inline, Lozenge, SectionMessage, Stack, Tag, TagGroup, Text, TextArea, User, UserGroup } from '@forge/react';
+import { invoke } from '@forge/bridge';
+import { Card, Feedback, Section, resultMessage } from './ui.jsx';
+
+function Row({ label, children }) {
+  return (
+    <Inline space="space.100" alignBlock="center" shouldWrap>
+      <Text weight="medium">{label}</Text>
+      {children}
+    </Inline>
+  );
+}
+
+function Tags({ items, empty }) {
+  if (!items?.length) return <Text>{empty}</Text>;
+  return <TagGroup>{items.map((t) => <Tag key={t} text={t} />)}</TagGroup>;
+}
+
+function PolicySummary({ policy }) {
+  const needsApproval = Object.entries(policy.operations ?? {}).filter(([, v]) => v === 'approve').map(([k]) => k.replace('jira.issue.', ''));
+  return (
+    <Card>
+      <Stack space="space.150">
+        <Heading size="small">Current rules</Heading>
+        <Row label="Projects agents may write to:"><Tags items={policy.allowedProjects} empty="none yet (all agent writes are refused)" /></Row>
+        <Row label="Always needs approval:"><Tags items={needsApproval} empty="nothing" /></Row>
+        <Row label="Protected statuses:"><Tags items={policy.protectedStatuses} empty="none" /></Row>
+        <Row label="Protected fields:"><Tags items={policy.protectedFields} empty="none" /></Row>
+        <Row label="Caps:">
+          <Text>{`${policy.bulkApprovalThreshold}+ issues need approval · max ${policy.maxTargetsPerCall} per call · ${policy.perActorHourlyLimit}/h and ${policy.perActorDailyLimit}/day per user · ${policy.siteDailyLimit}/day per site`}</Text>
+        </Row>
+        <Row label="Approvers:">
+          {policy.approvers?.length ? (
+            <UserGroup>{policy.approvers.map((id) => <User key={id} accountId={id} />)}</UserGroup>
+          ) : (
+            <Text>Jira administrators</Text>
+          )}
+          {policy.requireDistinctApprover && <Lozenge appearance="inprogress">two-person rule</Lozenge>}
+        </Row>
+      </Stack>
+    </Card>
+  );
+}
+
+export function PolicyPanel({ data, reload }) {
+  const [text, setText] = useState(() => JSON.stringify(data.policy, null, 2));
+  const [message, setMessage] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const paused = data.policy.agentWritesPaused;
+
+  const save = async (policy, okText) => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const r = await invoke('savePolicy', { policy });
+      setMessage(resultMessage(r, () => okText));
+      if (r?.status === 'OK') setText(JSON.stringify(r.policy, null, 2));
+    } catch (e) {
+      setMessage({ tone: 'error', text: `Could not save the policy: ${String(e)}` });
+    } finally {
+      setSaving(false);
+      reload();
+    }
+  };
+
+  const saveJson = () => {
+    let policy;
+    try {
+      policy = JSON.parse(text);
+    } catch {
+      setMessage({ tone: 'error', text: 'Policy is not valid JSON.' });
+      return;
+    }
+    save(policy, 'Policy saved.');
+  };
+
+  return (
+    <Section>
+      {data.policyErrors.length > 0 && (
+        <SectionMessage appearance="error" title="Stored policy is invalid">
+          <Text>{`All agent writes are blocked until it is fixed: ${data.policyErrors.join('; ')}`}</Text>
+        </SectionMessage>
+      )}
+      <Feedback message={message} />
+      <Card>
+        <Inline space="space.200" alignBlock="center" spread="space-between" shouldWrap>
+          <Stack space="space.050">
+            <Heading size="small">Kill switch</Heading>
+            <Text>{paused ? 'All agent writes are paused. Reads and approvals still work.' : 'Agents can write within the rules below.'}</Text>
+          </Stack>
+          {data.isAdmin ? (
+            <Button
+              appearance={paused ? 'primary' : 'danger'}
+              isDisabled={saving}
+              onClick={() => save({ ...data.policy, agentWritesPaused: !paused }, paused ? 'Agent writes resumed.' : 'All agent writes paused.')}
+            >
+              {paused ? 'Resume agent writes' : 'Pause all agent writes'}
+            </Button>
+          ) : (
+            <Lozenge appearance={paused ? 'removed' : 'success'} isBold>{paused ? 'Paused' : 'Active'}</Lozenge>
+          )}
+        </Inline>
+      </Card>
+      <PolicySummary policy={data.policy} />
+      <Stack space="space.100">
+        <Heading size="small">Policy JSON</Heading>
+        <TextArea value={text} onChange={(e) => setText(e.target.value)} isReadOnly={!data.isAdmin} isMonospaced resize="vertical" minimumRows={12} />
+        {data.isAdmin ? (
+          <Inline space="space.100">
+            <Button appearance="primary" isDisabled={saving} onClick={saveJson}>Save policy</Button>
+            <Button appearance="subtle" isDisabled={saving} onClick={() => { setText(JSON.stringify(data.policy, null, 2)); setMessage(null); }}>Discard edits</Button>
+          </Inline>
+        ) : (
+          <Text>Only Jira administrators can change the policy.</Text>
+        )}
+      </Stack>
+    </Section>
+  );
+}
