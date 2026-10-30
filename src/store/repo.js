@@ -23,11 +23,18 @@ export class Repo {
     let acquired = await this.store.set(LOCK_KEY, lease, { failIfExists: true, ttlSeconds: LOCK_LEASE_MS / 1000 });
     if (!acquired) {
       const held = await this.store.get(LOCK_KEY);
-      const stale = !held || !Number.isFinite(held.expiresAt) || held.expiresAt <= nowMs;
-      if (stale) {
-        await this.store.delete(LOCK_KEY);
-        // Still conditional: if two callers both saw a stale lease, only one wins.
-        acquired = await this.store.set(LOCK_KEY, lease, { failIfExists: true, ttlSeconds: LOCK_LEASE_MS / 1000 });
+      const ttl = { ttlSeconds: LOCK_LEASE_MS / 1000 };
+      if (!held) {
+        // Lease vanished between our set and get: just retry the conditional set, never delete.
+        acquired = await this.store.set(LOCK_KEY, lease, { failIfExists: true, ...ttl });
+      } else if (!Number.isFinite(held.expiresAt) || held.expiresAt <= nowMs) {
+        // Stale lease. Only the caller that claims this exact lease's takeover marker may
+        // remove it, so two callers that both saw it stale cannot both delete-and-reacquire.
+        const claimed = await this.store.set(`${LOCK_KEY}:takeover:${held.owner ?? 'unknown'}`, owner, { failIfExists: true, ...ttl });
+        if (claimed) {
+          await this.store.delete(LOCK_KEY);
+          acquired = await this.store.set(LOCK_KEY, lease, { failIfExists: true, ...ttl });
+        }
       }
     }
     if (!acquired) throw new GateError('BUSY', 'another gate mutation is in progress; retry in a moment');

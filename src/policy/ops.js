@@ -7,6 +7,9 @@ const ACCOUNT_ID = /^[A-Za-z0-9:_-]{1,128}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const LABEL = /^[^\s]{1,255}$/;
 const MAX_KEYS_PARSED = 200; // hard parser ceiling, independent of policy
+// Text ceilings keep a stored approval request far below the 240 KiB Forge KVS value limit.
+const MAX_TEXT = 32000;
+const MAX_LABELS = 50;
 
 function str(v) {
   if (v === undefined || v === null) return undefined;
@@ -58,6 +61,7 @@ export function buildOperation(kind, input = {}) {
       const keys = parseIssueKeys(input.issueKeys, errors);
       const body = typeof input.body === 'string' ? input.body.trim() : '';
       if (!body) errors.push('body is required');
+      else if (body.length > MAX_TEXT) errors.push(`body must be at most ${MAX_TEXT} characters`);
       op = { kind, targets: targetsFromKeys(keys), payload: { body }, fields: [] };
       break;
     }
@@ -97,6 +101,8 @@ export function buildOperation(kind, input = {}) {
       const add = list(input.labelsAdd);
       const remove = list(input.labelsRemove);
       for (const l of [...add, ...remove]) if (!LABEL.test(l)) errors.push(`invalid label '${l}'`);
+      if (add.length + remove.length > MAX_LABELS) errors.push(`at most ${MAX_LABELS} labels can be changed at once`);
+      if ([...add, ...remove].some((l) => l.length > 255)) errors.push('labels must be at most 255 characters');
       if (add.some((l) => remove.includes(l))) errors.push('a label cannot be both added and removed');
       if (add.length || remove.length) changes.labels = { add: add.sort(), remove: remove.sort() };
       if (Object.keys(changes).length === 0) errors.push('no supported field to change (summary, priority, dueDate, labelsAdd, labelsRemove)');
@@ -111,6 +117,7 @@ export function buildOperation(kind, input = {}) {
       if (!summary) errors.push('summary is required');
       else if (summary.length > 255) errors.push('summary must be at most 255 characters');
       const description = typeof input.description === 'string' ? input.description.trim() : '';
+      if (description.length > MAX_TEXT) errors.push(`description must be at most ${MAX_TEXT} characters`);
       op = {
         kind,
         targets: [{ issueKey: null, projectKey: projectKey ?? '' }],

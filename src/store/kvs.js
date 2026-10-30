@@ -18,9 +18,11 @@ export class KvsStore {
       await this.kvs.set(key, value, options);
       return true;
     } catch (err) {
+      // @forge/kvs puts the HTTP status on err.responseDetails.status (ForgeKvsAPIError).
       // TODO(verify on a real site): exact error code KVS raises for FAIL_IF_EXISTS conflicts.
+      const status = err?.responseDetails?.status ?? err?.status ?? err?.statusCode;
       const code = String(err?.code ?? err?.name ?? err?.message ?? '');
-      if (failIfExists && (err?.status === 409 || err?.statusCode === 409 || /exist|conflict|precondition/i.test(code))) return false;
+      if (failIfExists && (status === 409 || status === 412 || /exist|conflict|precondition/i.test(code))) return false;
       throw err;
     }
   }

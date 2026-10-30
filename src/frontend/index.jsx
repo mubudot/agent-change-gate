@@ -95,11 +95,20 @@ function Audit({ data }) {
 function Policy({ data, reload }) {
   const [text, setText] = useState(JSON.stringify(data.policy, null, 2));
   const [msg, setMsg] = useState(null);
+  const [saving, setSaving] = useState(false);
   const save = async (policy) => {
-    const r = await invoke('savePolicy', { policy });
-    setMsg(r.status === 'OK' ? 'Policy saved.' : r.message ?? (r.errors ?? []).join('; '));
-    if (r.status === 'OK') setText(JSON.stringify(r.policy, null, 2));
-    reload();
+    setSaving(true);
+    setMsg(null);
+    try {
+      const r = await invoke('savePolicy', { policy });
+      setMsg(r.status === 'OK' ? 'Policy saved.' : r.message ?? (r.errors ?? []).join('; '));
+      if (r.status === 'OK') setText(JSON.stringify(r.policy, null, 2));
+    } catch (e) {
+      setMsg(`Could not save the policy: ${String(e)}`);
+    } finally {
+      setSaving(false);
+      reload();
+    }
   };
   const parsed = () => {
     try {
@@ -119,14 +128,14 @@ function Policy({ data, reload }) {
         <Text>Kill switch:</Text>
         <Lozenge appearance={data.policy.agentWritesPaused ? 'removed' : 'success'}>{data.policy.agentWritesPaused ? 'AGENT WRITES PAUSED' : 'ACTIVE'}</Lozenge>
         {data.isAdmin && (
-          <Button appearance={data.policy.agentWritesPaused ? 'primary' : 'danger'} onClick={() => save({ ...data.policy, agentWritesPaused: !data.policy.agentWritesPaused })}>
+          <Button appearance={data.policy.agentWritesPaused ? 'primary' : 'danger'} isDisabled={saving} onClick={() => save({ ...data.policy, agentWritesPaused: !data.policy.agentWritesPaused })}>
             {data.policy.agentWritesPaused ? 'Resume agent writes' : 'Pause all agent writes'}
           </Button>
         )}
       </Inline>
       <TextArea value={text} onChange={(e) => setText(e.target.value)} isReadOnly={!data.isAdmin} resize="vertical" />
       {data.isAdmin ? (
-        <Button appearance="primary" onClick={() => { const p = parsed(); if (p) save(p); }}>Save policy</Button>
+        <Button appearance="primary" isDisabled={saving} onClick={() => { const p = parsed(); if (p) save(p); }}>Save policy</Button>
       ) : (
         <Text>Only Jira administrators can change the policy.</Text>
       )}

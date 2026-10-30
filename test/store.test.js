@@ -97,3 +97,10 @@ test('personal audit prefixes isolate account IDs containing the storage delimit
   assert.deepEqual((await repo.listAuditForActor('acct-fixture')).map((e) => e.id), ['id-000001']);
   assert.deepEqual((await repo.listAuditForActor('acct-fixture:other')).map((e) => e.id), ['id-000002']);
 });
+
+test('KVS FAIL_IF_EXISTS conflicts are read from the SDK error shape', async () => {
+  const err = Object.assign(new Error('boom'), { code: 'SOMETHING', responseDetails: { status: 409 } });
+  const store = new KvsStore({ set: async () => { throw err; } }, {});
+  assert.equal(await store.set('k', 1, { failIfExists: true }), false);
+  await assert.rejects(store.set('k', 1), /boom/);
+});

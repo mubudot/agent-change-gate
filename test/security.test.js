@@ -19,11 +19,11 @@ async function approved(env, kind = 'jira.issue.delete', input = { issueKeys: 'D
   return pending.approvalId;
 }
 
-test('payload identity and undocumented principal fallback never supply an actor', async () => {
+test('identity comes only from the platform context, never from the payload', async () => {
   const env = await setup();
   const h = makeHandlers(() => env.svc);
   const spoof = { ...comment, accountId: ALICE, context: { accountId: ALICE, principal: { accountId: ALICE } } };
-  for (const context of [undefined, {}, { principal: { accountId: ALICE } }, { accountId: {} }, { accountId: '' }]) {
+  for (const context of [undefined, {}, { principal: {} }, { principal: { accountId: {} } }, { accountId: {} }, { accountId: '' }]) {
     assert.equal(actorFrom(spoof, context), null);
     assert.equal((await h.commentIssues(spoof, context)).status, 'INVALID');
     assert.equal((await h.myActivity(spoof, context)).status, 'INVALID');
@@ -233,4 +233,28 @@ test('release never deletes a lease taken over by someone else', async () => {
     await env.store.set('mutation-lock', { owner: 'other', expiresAt: Number.MAX_SAFE_INTEGER });
   }, 0);
   assert.equal((await env.store.get('mutation-lock')).owner, 'other');
+});
+
+test('Forge function context.principal.accountId is the acting user', async () => {
+  const env = await setup();
+  const h = makeHandlers(() => env.svc);
+  // Documented shape for plain Forge functions (Rovo actions, MCP tools).
+  assert.equal(actorFrom({ ...comment, accountId: BOB }, { principal: { accountId: ALICE }, installContext: 'ari:x' }), ALICE);
+  assert.equal((await h.commentIssues(comment, { principal: { accountId: ALICE } })).status, 'EXECUTED');
+});
+
+test('two callers that both see the same stale lease cannot both take it over', async () => {
+  const env = await setup();
+  await env.store.set('mutation-lock', { owner: 'dead', expiresAt: 0 });
+  const entered = deferred();
+  const release = deferred();
+  const first = env.repo.withMutation(async () => { entered.resolve(); await release.promise; }, 1_000);
+  await entered.promise;
+  // Second caller re-reads a stale lease written by the same dead owner (simulating it read before the takeover).
+  const realGet = env.store.get.bind(env.store);
+  env.store.get = async (key) => (key === 'mutation-lock' ? { owner: 'dead', expiresAt: 0 } : realGet(key));
+  await assert.rejects(env.repo.withMutation(async () => assert.fail('second caller ran'), 1_000), /another gate mutation/);
+  env.store.get = realGet;
+  release.resolve();
+  await first;
 });

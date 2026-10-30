@@ -2,8 +2,12 @@
 // Identity ALWAYS comes from the platform context, never from LLM-chosen inputs.
 import { ISSUE_KEY } from './policy/ops.js';
 
+// Forge passes the signed-in user as context.principal.accountId to plain functions
+// (https://developer.atlassian.com/platform/forge/function-reference/arguments/). The flat
+// context.accountId form is what @forge/resolver hands UI resolvers; accept it too. Both come
+// from the platform's second argument; anything inside the LLM-built payload is ignored.
 export function actorFrom(payload, context) {
-  const actor = context?.accountId;
+  const actor = context?.principal?.accountId ?? context?.accountId;
   return typeof actor === 'string' && /^[A-Za-z0-9:_-]{1,128}$/.test(actor) ? actor : null;
 }
 

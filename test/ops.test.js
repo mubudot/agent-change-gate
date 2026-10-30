@@ -53,3 +53,12 @@ test('fingerprint ignores key order and target order, changes with payload', () 
   assert.notEqual(fingerprintOperation(a), fingerprintOperation(c));
   assert.equal(canonicalJson({ b: 1, a: [1, { d: 2, c: 3 }] }), '{"a":[1,{"c":3,"d":2}],"b":1}');
 });
+
+test('oversized text and label sets are rejected before they reach storage', () => {
+  const big = 'x'.repeat(32001);
+  const e = (kind, input) => buildOperation(kind, input).errors.join(' ');
+  assert.match(e('jira.issue.comment', { issueKeys: 'DEMO-1', body: big }), /body must be at most/);
+  assert.match(e('jira.issue.create', { projectKey: 'DEMO', summary: 's', description: big }), /description must be at most/);
+  const labels = Array.from({ length: 51 }, (_, i) => `l${i}`).join(',');
+  assert.match(e('jira.issue.edit', { issueKeys: 'DEMO-1', labelsAdd: labels }), /at most 50 labels/);
+});

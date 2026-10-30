@@ -6,7 +6,7 @@ Local implementation only. Not registered, deployed, installed, or submitted. No
 
 | Severity | Finding | Resolution |
 |---|---|---|
-| P1 | Action identity fell back to `payload.context.accountId` and an undocumented principal shape. Missing Forge identity could select another requester's approvals/usage. | Only validated `context.accountId` is accepted; missing identity refuses writes and personal activity access. |
+| P1 | Action identity fell back to `payload.context.accountId` and an undocumented principal shape. Missing Forge identity could select another requester's approvals/usage. | Only the platform context's validated `context.principal.accountId` (documented Forge function shape) or flat `context.accountId` is accepted; payload identity is ignored; missing identity refuses writes and personal activity access. |
 | P1 | Approval fingerprints omitted resolved issue/project/transition identities. Workflow changes with the same risk code could execute a different destination. | Fingerprints bind resolved IDs and destination names, are recomputed after resolution, and Jira writes use stable IDs. Ambiguous/missing destinations fail closed; issue aliases are deduplicated. |
 | P1 | Concurrent decisions could overwrite rejection; parallel writes could race the caps; successful writes with lost responses or storage errors could go uncounted. | Storage-backed serialization covers all gate mutations; usage is reserved before dispatch without refunds, and a pre-dispatch audit intent is mandatory. Single-use claims remain permanent. |
 | P1 | Approval expiry was checked before potentially slow Jira/permission reads, and a newly enabled two-person rule did not invalidate an earlier decision. | Fresh expiry checks before decision/dispatch; approver-list or distinct-approver setting changes invalidate old approvals. |
@@ -53,11 +53,23 @@ They do not execute the Forge runtime or mount UI Kit. The Forge dependencies ar
   Fixed by pinning `react@^18.3.1` (single deduped copy) and committing `package-lock.json`; `test/deps.test.js`
   guards the React major. Deployed as development v2.2.0 (same scopes, no reinstall). The `logs` workflow action
   (`forge logs -e development --since 1h --limit 200`) is how to read resolver errors.
+- 2026-10-30 16:31: page rendered but every resolver call failed: `TypeError: resolver_out_namespaceObject is not a
+  constructor at buildResolver (src/resolvers.js:14)`, thrown while loading `src/index.js`, so every function in the
+  bundle (UI resolver and all Rovo/MCP actions) failed at module load. Cause: `@forge/resolver` is CommonJS
+  (`exports.default = Resolver`); with `"type": "module"` both Node and the Forge webpack bundle resolve a default
+  import to the whole `module.exports` object. Fixed with named imports only (`makeResolver`, `asUser`) in 45c3493;
+  `test/runtime.test.js` reproduces the crash on the old code and bans default/namespace `@forge/*` imports in backend
+  code. Deployed development v2.3.0. `"type": "module"` stays (tests run as native ESM; `.jsx` keeps webpack interop).
+- Codex review (work/codex_codegeist_review.md) round 1 fixes: actions read `context.principal.accountId` (the
+  documented Forge function context; the old flat-only check would have refused every Rovo/MCP call); stale-lock
+  takeover is claimed per dead lease so two callers cannot both delete-and-reacquire; KVS conflicts read
+  `err.responseDetails.status`; comment/description/label sizes bounded below the 240 KiB KVS value limit; policy
+  save shows transport errors and disables its buttons while saving.
 - Still to confirm by loading the page: dashboard renders and `getDashboard` succeeds in `forge logs`.
 
 ## Verify on a real site
 
-- Rovo and external MCP handler `(payload, context)` shapes; signed-in identity in `context.accountId`; issue-view
+- Rovo and external MCP handler `(payload, context)` shapes; signed-in identity in `context.principal.accountId`; issue-view
   fallback shape (`payload.context.jira.issueKey`); missing identity must refuse rather than infer an actor.
 - `api.asUser().requestJira(assumeTrustedRoute(path))` inside all action invocation modes, consent behavior, and
   Jira permission refusals. The client validates path references, and never passes an account ID to `asUser`.

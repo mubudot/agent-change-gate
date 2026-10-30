@@ -73,7 +73,7 @@ NEEDS_APPROVAL (a human approver can say yes):
 
 ## Identity and permissions
 
-- The acting user is always `context.accountId` from Forge, never an LLM-supplied input (per Rovo action docs).
+- The acting user is always the platform context's `principal.accountId` (Forge function arguments), never an LLM-supplied input.
 - All Jira calls use `api.asUser()`, so the gate can only **narrow** what the human could already do.
 - If the agent omits `issueKeys`, the issue the user is viewing (`payload.context.jira.issueKey`) is used.
 - Issue keys, account ids, dates and labels are regex-validated; the Jira client also rejects unsafe issue references before applying `encodeURIComponent`.
