@@ -129,3 +129,8 @@ They do not execute the Forge runtime or mount UI Kit. The Forge dependencies ar
 - [Jira request authentication/routing](https://developer.atlassian.com/platform/forge/apis-reference/fetch-api-product.requestjira/), [mypermissions scope](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-permissions/)
 - [UI Kit components](https://developer.atlassian.com/platform/forge/ui-kit/components/), [packaging](https://developer.atlassian.com/platform/forge/manifest-reference/packaging/)
 - [Official hackathon rules](https://codegeist2026.devpost.com/rules): installation/video requirements and Agents/MCP bonus paths agree with RULES.md. Rules say `rovo:action`; the current Forge module reference uses `action`. This entry also declares `rovo:agent` directly.
+- 2026-10-30 19:35 (6e20084, dev deploy run 41049159787): UI copy fixes found while recording the demo.
+  Policy caps now say "More than N issues in one call need approval" (gate uses units > threshold);
+  running an approved simulated request says "Approved change ran once (dry run): Jira was not changed."
+  instead of "Gate verdict ALLOW"; the simulator's NEEDS APPROVAL banner is replaced once the request is
+  approved/rejected/expired/executed. 118 tests. Manifest/scopes unchanged.
