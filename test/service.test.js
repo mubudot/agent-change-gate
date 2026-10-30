@@ -8,9 +8,10 @@ test('allowed comment executes as the user and is audited', async () => {
   const r = await svc.guardedChange('jira.issue.comment', { issueKeys: 'DEMO-1', body: 'hello' }, ALICE);
   assert.equal(r.status, 'EXECUTED');
   assert.equal(writes().length, 1);
-  assert.equal(writes()[0].path, '/rest/api/3/issue/DEMO-1/comment');
+  assert.equal(writes()[0].path, '/rest/api/3/issue/10000/comment');
   const audit = await repo.listAudit();
-  assert.equal(audit[0].outcome, 'EXECUTED');
+  assert.ok(audit.some((e) => e.outcome === 'EXECUTED'));
+  assert.ok(audit.some((e) => e.outcome === 'EXECUTION_STARTED'));
   assert.equal((await repo.getUsage(ALICE, Date.UTC(2026, 10, 2, 9), 'UTC')).actorDay, 1);
 });
 
@@ -136,13 +137,13 @@ test('hourly cap turns the next write into an approval request', async () => {
   assert.equal((await svc.guardedChange('jira.issue.comment', { issueKeys: 'DEMO-4', body: 'x' }, BOB)).status, 'EXECUTED');
 });
 
-test('partial failure is reported per issue and only successes are counted', async () => {
+test('partial failure is reported per issue and all attempted targets are reserved', async () => {
   const { svc, jira, repo } = await setup();
   jira.state.failWrites.add('DEMO-2');
   const r = await svc.guardedChange('jira.issue.comment', { issueKeys: 'DEMO-1,DEMO-2', body: 'x' }, ALICE);
   assert.equal(r.status, 'PARTIAL');
   assert.deepEqual(r.results.map((x) => x.ok), [true, false]);
-  assert.equal((await repo.getUsage(ALICE, Date.UTC(2026, 10, 2, 9), 'UTC')).actorDay, 1);
+  assert.equal((await repo.getUsage(ALICE, Date.UTC(2026, 10, 2, 9), 'UTC')).actorDay, 2);
 });
 
 test('transition into Done (protected) needs approval; In Review runs', async () => {
@@ -188,7 +189,7 @@ test('handlers take identity from context, not inputs, and fall back to the issu
     { accountId: ALICE },
   );
   assert.equal(r.status, 'EXECUTED');
-  assert.equal(writes()[0].path, '/rest/api/3/issue/DEMO-3/comment');
+  assert.equal(writes()[0].path, '/rest/api/3/issue/10002/comment');
   assert.equal((await h.myActivity({}, { accountId: ALICE })).entries[0].actor, ALICE);
   assert.equal((await h.commentIssues({ issueKeys: 'DEMO-1', body: 'x' }, {})).status, 'INVALID');
 });

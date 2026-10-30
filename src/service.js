@@ -2,7 +2,7 @@
 // All dependencies are injected so the whole flow runs in unit tests without Forge.
 import { buildOperation } from './policy/ops.js';
 import { evaluate, Verdict } from './policy/gate.js';
-import { fingerprintOperation } from './policy/fingerprint.js';
+import { fingerprintOperation, canonicalJson } from './policy/fingerprint.js';
 import { createRequest, decide, claim, finish, withExpiry, GateError, Status } from './policy/approvals.js';
 import { clone } from './policy/policy.js';
 import { resolveOperation, executeOperation, outcomeOf } from './jira/executor.js';
@@ -25,12 +25,15 @@ export class GateService {
 
   /** Main entry for every guarded write action. */
   async guardedChange(kind, input, actor, { preview = false } = {}) {
+    return this.mutate(actor, () => this.change(kind, input, actor, { preview }));
+  }
+
+  async change(kind, input, actor, { preview }) {
     if (!actor) return out('INVALID', { errors: ['no user context: actions must run on behalf of a signed-in user'] });
     const { op, errors } = buildOperation(kind, input);
     if (!op) return out('INVALID', { errors });
 
     const { policy, errors: policyErrors } = await this.repo.loadPolicy();
-    const now = this.now();
 
     // Do not spend Jira reads on calls the gate will reject on size alone.
     let plan = { transitionIds: {} };
@@ -40,6 +43,7 @@ export class GateService {
     }
     if (resolveErrors.length) return out('INVALID', { errors: resolveErrors });
 
+    const now = this.now();
     const usage = await this.repo.getUsage(actor, now, policy.timezone);
     const decision = evaluate(policy, op, usage, { policyErrors });
     const fingerprint = fingerprintOperation(op);
@@ -53,14 +57,12 @@ export class GateService {
     }
 
     if (decision.verdict === Verdict.NEEDS_APPROVAL) {
-      const existing = (await this.repo.listOpenRequests(100)).find(
-        (r) => r.requester === actor && r.fingerprint === fingerprint && withExpiry(r, now).status === Status.PENDING,
-      );
+      const existing = await this.repo.findPending(actor, fingerprint, now);
       const req =
         existing ??
         createRequest({
           id: this.newId(),
-          op: stripResolved(op),
+          op: clone(op),
           fingerprint,
           requester: actor,
           reasons: decision.reasons,
@@ -81,15 +83,19 @@ export class GateService {
       });
     }
 
+    await this.reserveAndAudit(actor, op, policy, decision.verdict, []);
     const results = await this.execute(op, plan);
-    const { okCount, outcome } = outcomeOf(results);
-    await this.repo.addUsage(actor, now, policy.timezone, okCount);
+    const { outcome } = outcomeOf(results);
     await this.audit({ actor, op, verdict: decision.verdict, outcome, reasons: [], results });
     return out(outcome, { ...base, results });
   }
 
   /** Run a request a human approved. Single use, requester only, same operation only. */
   async runApproved(approvalId, actor) {
+    return this.mutate(actor, () => this.run(approvalId, actor));
+  }
+
+  async run(approvalId, actor) {
     if (!actor) return out('INVALID', { errors: ['no user context'] });
     const stored = await this.repo.getRequest(approvalId);
     if (!stored) return out('INVALID', { errors: [`no approval request '${approvalId}'`] });
@@ -115,6 +121,12 @@ export class GateService {
     const decision = resolveErrors.length
       ? { verdict: Verdict.DENY, reasons: resolveErrors.map((m) => ({ code: 'RESOLVE_FAILED', message: m })) }
       : evaluate(policy, op, usage, { policyErrors });
+    // A change to the authority configuration invalidates old decisions, including
+    // approvals made with a previously disabled two-person rule.
+    if (stored.approvalAuthority !== approvalAuthority(policy)) {
+      await this.repo.saveRequest(finish(req, { ok: false, result: { refused: 'AUTHORITY_CHANGED' }, now: this.now() }));
+      return out('REFUSED', { code: 'AUTHORITY_CHANGED', message: 'approval authority changed; request a new approval' });
+    }
     const approvedCodes = new Set(stored.reasons.map((r) => r.code));
     const newRisks = decision.reasons.filter((r) => !approvedCodes.has(r.code) && !RATE_CODES.has(r.code));
     if (decision.verdict === Verdict.DENY || newRisks.length) {
@@ -129,15 +141,28 @@ export class GateService {
       });
     }
 
-    if (!(await this.repo.claimExecution(approvalId, actor, now))) {
+    // Resolution may have taken minutes, or Jira may now map the requested name
+    // to a different transition. Recheck BOTH the expiry and resolved fingerprint.
+    try {
+      req = claim(stored, { actor, fingerprint: fingerprintOperation(op), now: this.now() });
+    } catch (e) {
+      if (!(e instanceof GateError)) throw e;
+      if (e.code === 'EXPIRED') await this.repo.saveRequest(withExpiry(stored, this.now()));
+      return out('REFUSED', { code: e.code, message: e.message });
+    }
+    if (!(await this.repo.claimExecution(approvalId, actor, this.now()))) {
       return out('REFUSED', { code: 'ALREADY_USED', message: 'this approval was already used' });
     }
     await this.repo.saveRequest(req);
+    await this.reserveAndAudit(actor, op, policy, 'APPROVED', stored.reasons, approvalId);
+    if (this.now() >= stored.expiresAt) {
+      await this.repo.saveRequest(withExpiry(stored, this.now()));
+      return out('REFUSED', { code: 'EXPIRED', message: 'approval expired before execution' });
+    }
     const results = await this.execute(op, plan);
-    const { okCount, outcome } = outcomeOf(results);
+    const { outcome } = outcomeOf(results);
     const done = finish(req, { ok: outcome === 'EXECUTED', result: { results }, now: this.now() });
     await this.repo.saveRequest(done);
-    await this.repo.addUsage(actor, now, policy.timezone, okCount);
     await this.audit({ actor, op, verdict: 'APPROVED', outcome, reasons: stored.reasons, approvalId, results });
     return out(outcome, { approvalId, approvedBy: stored.decidedBy, results });
   }
@@ -164,19 +189,25 @@ export class GateService {
   }
 
   async decideRequest(approvalId, approve, note, actor) {
+    return this.mutate(actor, () => this.decide(approvalId, approve, note, actor));
+  }
+
+  async decide(approvalId, approve, note, actor) {
     const req = await this.repo.getRequest(approvalId);
     if (!req) return out('INVALID', { errors: ['request not found'] });
-    const { policy } = await this.repo.loadPolicy();
-    const now = this.now();
+    const { policy, errors } = await this.repo.loadPolicy();
+    if (errors.length) return out('REFUSED', { code: 'POLICY_INVALID', message: 'fix the stored policy before deciding requests' });
+    const isApprover = await this.isApprover(actor, policy);
     try {
       const decided = decide(req, {
         approver: actor,
         approve: approve === true,
         note,
-        now,
-        isApprover: await this.isApprover(actor, policy),
+        now: this.now(),
+        isApprover,
         requireDistinctApprover: policy.requireDistinctApprover,
       });
+      decided.approvalAuthority = approvalAuthority(policy);
       await this.repo.saveRequest(decided);
       await this.audit({
         actor,
@@ -197,13 +228,14 @@ export class GateService {
   }
 
   async dashboard(actor) {
+    if (!actor) throw new GateError('NO_USER', 'no user context');
     const { policy, errors } = await this.repo.loadPolicy();
     const approver = await this.isApprover(actor, policy);
     const isAdmin = await this.jira.isJiraAdmin();
     const now = this.now();
-    const open = (await this.repo.listOpenRequests(50)).map((r) => withExpiry(r, now));
-    const visible = approver || isAdmin ? open : open.filter((r) => r.requester === actor);
+    const visible = await this.repo.listOpenRequests(50, now, approver || isAdmin ? undefined : actor);
     return {
+      actor,
       isApprover: approver,
       isAdmin,
       policy,
@@ -215,6 +247,10 @@ export class GateService {
   }
 
   async savePolicy(input, actor) {
+    return this.mutate(actor, () => this.updatePolicy(input, actor));
+  }
+
+  async updatePolicy(input, actor) {
     if (!(await this.jira.isJiraAdmin())) return out('REFUSED', { code: 'NOT_ADMIN', message: 'only Jira administrators can change the policy' });
     const res = await this.repo.savePolicy(input);
     if (!res.ok) return out('INVALID', { errors: res.errors });
@@ -223,6 +259,7 @@ export class GateService {
   }
 
   async myActivity(actor) {
+    if (!actor) return out('INVALID', { errors: ['no user context'] });
     return out('OK', { entries: await this.repo.listAuditForActor(actor, 20) });
   }
 
@@ -233,6 +270,23 @@ export class GateService {
   }
 
   // ---------- internals ----------
+
+  async mutate(actor, work) {
+    if (!actor) return out('INVALID', { errors: ['no user context'] });
+    try {
+      return await this.repo.withMutation(work);
+    } catch (e) {
+      if (!(e instanceof GateError)) throw e;
+      return out('REFUSED', { code: e.code, message: e.message });
+    }
+  }
+
+  async reserveAndAudit(actor, op, policy, verdict, reasons, approvalId) {
+    // Count attempted targets before sending writes: a lost Jira response must
+    // never buy an agent another uncounted write. Failed attempts are not refunded.
+    await this.repo.addUsage(actor, this.now(), policy.timezone, op.targets.length);
+    await this.audit({ actor, op, verdict, outcome: 'EXECUTION_STARTED', reasons, approvalId });
+  }
 
   resolve(op) {
     return resolveOperation(op, this.jira);
@@ -258,10 +312,8 @@ export class GateService {
   }
 }
 
-function stripResolved(op) {
-  const c = clone(op);
-  c.targets = c.targets.map(({ issueKey, projectKey }) => ({ issueKey, projectKey }));
-  return c;
+function approvalAuthority(policy) {
+  return canonicalJson({ approvers: [...policy.approvers].sort(), requireDistinctApprover: policy.requireDistinctApprover });
 }
 
 function previewMessage(d) {

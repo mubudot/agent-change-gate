@@ -5,11 +5,20 @@
 export async function resolveOperation(op, jira) {
   const errors = [];
   const plan = { transitionIds: {} };
-  if (op.kind === 'jira.issue.create') return { plan, errors };
+  if (op.kind === 'jira.issue.create') {
+    try {
+      const project = await jira.getProject(op.payload.projectKey);
+      if (!validId(project.id) || !project.key) throw new Error('Jira did not return a project identity');
+      op.targets[0].projectKey = project.key;
+      op.targets[0].projectId = String(project.id);
+      op.payload.projectId = String(project.id);
+    } catch (e) { errors.push(e.message); }
+    return { plan, errors };
+  }
   for (const t of op.targets) {
     let issue;
     try {
-      issue = await jira.getIssue(t.issueKey);
+      issue = await jira.getIssue(t.issueId ?? t.issueKey);
     } catch (e) {
       errors.push(e.message);
       continue;
@@ -18,30 +27,51 @@ export async function resolveOperation(op, jira) {
       errors.push(`${t.issueKey} does not exist or you cannot see it`);
       continue;
     }
+    if (!validId(issue.id) || !validId(issue.projectId) || !issue.key) {
+      errors.push(`${t.issueKey}: Jira did not return an issue/project identity`);
+      continue;
+    }
+    t.issueId = String(issue.id);
+    t.issueKey = issue.key;
+    t.projectId = String(issue.projectId);
     t.projectKey = issue.projectKey;
     t.currentStatus = issue.status;
     if (op.kind === 'jira.issue.transition') {
       const want = String(op.toStatus).toLowerCase();
       let transitions;
       try {
-        transitions = await jira.getTransitions(t.issueKey);
+        transitions = await jira.getTransitions(t.issueId);
       } catch (e) {
         errors.push(e.message);
         continue;
       }
-      const match =
-        transitions.find((x) => String(x.to ?? '').toLowerCase() === want) ??
-        transitions.find((x) => String(x.name).toLowerCase() === want);
+      const byStatus = transitions.filter((x) => String(x.to ?? '').toLowerCase() === want);
+      const matches = byStatus.length ? byStatus : transitions.filter((x) => String(x.name).toLowerCase() === want);
+      if (matches.length > 1) {
+        errors.push(`${t.issueKey}: transition '${op.toStatus}' is ambiguous`);
+        continue;
+      }
+      const match = matches[0];
       if (!match) {
         errors.push(`${t.issueKey} (status ${issue.status}) has no transition to '${op.toStatus}'`);
         continue;
       }
-      plan.transitionIds[t.issueKey] = match.id;
-      t.toStatus = match.to ?? match.name;
+      if (!validId(match.id) || !validId(match.toId) || !match.to) {
+        errors.push(`${t.issueKey}: Jira did not return a transition destination identity`);
+        continue;
+      }
+      t.transitionId = String(match.id);
+      t.toStatusId = String(match.toId);
+      plan.transitionIds[t.issueId] = String(match.id);
+      t.toStatus = match.to;
     }
   }
+  // Old and new keys can both resolve to the same issue after a move.
+  op.targets = op.targets.filter((t, i, all) => all.findIndex((x) => x.issueId === t.issueId) === i);
   return { plan, errors };
 }
+
+const validId = (id) => /^[1-9][0-9]*$/.test(String(id));
 
 const WRITERS = {
   'jira.issue.comment': (jira, key, op) => jira.addComment(key, op.payload.body),
@@ -63,7 +93,7 @@ export async function executeOperation(op, plan, jira) {
       continue;
     }
     try {
-      const r = await write(jira, key, op, plan);
+      const r = await write(jira, t.issueId ?? key, op, plan);
       const ok = r.status >= 200 && r.status < 300;
       results.push({ key: key ?? r.data?.key ?? null, ok, httpStatus: r.status, ...(ok ? {} : { error: jiraError(r) }) });
     } catch (e) {

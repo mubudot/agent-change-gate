@@ -1,5 +1,6 @@
-// Forge entry point. The only file (with store/kvs.js and frontend/) that imports @forge/*.
+// Forge entry point: platform wiring and the asUser transport.
 import api, { assumeTrustedRoute } from '@forge/api';
+import { kvs, WhereConditions } from '@forge/kvs';
 import { KvsStore } from './store/kvs.js';
 import { Repo } from './store/repo.js';
 import { JiraClient } from './jira/client.js';
@@ -26,7 +27,7 @@ async function requestAsUser(method, path, body) {
   return { status: res.status, data };
 }
 
-const service = () => new GateService({ repo: new Repo(new KvsStore()), jira: new JiraClient(requestAsUser) });
+const service = () => new GateService({ repo: new Repo(new KvsStore(kvs, WhereConditions)), jira: new JiraClient(requestAsUser) });
 
 const h = makeHandlers(service);
 export const commentIssues = h.commentIssues;

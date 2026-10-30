@@ -18,6 +18,7 @@ import ForgeReconciler, {
   TextArea,
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
+import { approvalDetails } from './approval-details.js';
 
 const fmt = (ms) => new Date(ms).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
 const appearance = { PENDING: 'inprogress', APPROVED: 'success', REJECTED: 'removed', EXPIRED: 'default', EXECUTED: 'success', FAILED: 'removed' };
@@ -27,16 +28,19 @@ function Requests({ data, reload }) {
   const [msg, setMsg] = useState(null);
   const act = async (id, approve) => {
     setBusy(id);
-    const r = await invoke('decide', { approvalId: id, approve });
-    setMsg(r.status === 'OK' ? `Request ${r.approvalStatus.toLowerCase()}.` : r.message ?? (r.errors ?? []).join('; '));
-    setBusy(null);
-    reload();
+    try {
+      const r = await invoke('decide', { approvalId: id, approve });
+      setMsg(r.status === 'OK' ? `Request ${r.approvalStatus.toLowerCase()}.` : r.message ?? (r.errors ?? []).join('; '));
+      reload();
+    } catch (e) {
+      setMsg(String(e));
+    } finally { setBusy(null); }
   };
   const rows = data.requests.map((r) => ({
     key: r.id,
     cells: [
       { key: 'when', content: fmt(r.createdAt) },
-      { key: 'op', content: `${r.op.kind.replace('jira.issue.', '')} → ${r.op.targets.map((t) => t.issueKey ?? `new in ${t.projectKey}`).join(', ')}` },
+      { key: 'op', content: <Text>{approvalDetails(r)}</Text> },
       { key: 'why', content: r.reasons.map((x) => x.message).join(' · ') },
       { key: 'status', content: <Lozenge appearance={appearance[r.status] ?? 'default'}>{r.status}</Lozenge> },
       {
@@ -44,7 +48,7 @@ function Requests({ data, reload }) {
         content:
           data.isApprover && r.status === 'PENDING' ? (
             <Inline space="space.100">
-              <Button appearance="primary" isDisabled={busy === r.id} onClick={() => act(r.id, true)}>Approve</Button>
+              <Button appearance="primary" isDisabled={busy === r.id || (data.policy.requireDistinctApprover && r.requester === data.actor)} onClick={() => act(r.id, true)}>Approve</Button>
               <Button appearance="warning" isDisabled={busy === r.id} onClick={() => act(r.id, false)}>Reject</Button>
             </Inline>
           ) : (
@@ -55,7 +59,7 @@ function Requests({ data, reload }) {
   }));
   return (
     <Stack space="space.200">
-      {msg && <SectionMessage>{msg}</SectionMessage>}
+      {msg && <SectionMessage><Text>{msg}</Text></SectionMessage>}
       {!data.isApprover && <SectionMessage appearance="information"><Text>You can see your own requests. Only approvers can decide.</Text></SectionMessage>}
       <DynamicTable
         head={{ cells: ['Requested', 'Change', 'Why it needs a human', 'Status', ''].map((c, i) => ({ key: String(i), content: c })) }}
@@ -110,7 +114,7 @@ function Policy({ data, reload }) {
       {data.policyErrors.length > 0 && (
         <SectionMessage appearance="error"><Text>Stored policy is invalid, so all agent writes are blocked: {data.policyErrors.join('; ')}</Text></SectionMessage>
       )}
-      {msg && <SectionMessage>{msg}</SectionMessage>}
+      {msg && <SectionMessage><Text>{msg}</Text></SectionMessage>}
       <Inline space="space.100" alignBlock="center">
         <Text>Kill switch:</Text>
         <Lozenge appearance={data.policy.agentWritesPaused ? 'removed' : 'success'}>{data.policy.agentWritesPaused ? 'AGENT WRITES PAUSED' : 'ACTIVE'}</Lozenge>
@@ -141,7 +145,7 @@ function App() {
     <Box padding="space.200">
       <Stack space="space.200">
         <Heading size="large">Agent Change Gate</Heading>
-        <Text>Every Jira write made by a Rovo agent or MCP client through this app passes a deterministic policy check. Agent writes on this site today: {data.siteUsageToday}.</Text>
+        <Text>Every Jira write through this app passes a deterministic policy check. Agent write targets reserved on this site today: {data.siteUsageToday} (includes failed attempts).</Text>
         <Tabs id="acg-tabs">
           <TabList>
             <Tab>Approvals ({data.requests.filter((r) => r.status === 'PENDING').length})</Tab>

@@ -36,7 +36,7 @@ export const DEFAULT_POLICY = Object.freeze({
   protectedStatuses: ['Done', 'Closed', "Won't Do"],
   maxTargetsPerCall: 20, // above this: DENY (agent must split the work and ask)
   bulkApprovalThreshold: 5, // above this: NEEDS_APPROVAL
-  perActorHourlyLimit: 30, // issue writes per user (agent acting as that user) per rolling clock hour
+  perActorHourlyLimit: 30, // attempted issue writes per user in a fixed UTC clock hour
   perActorDailyLimit: 100,
   siteDailyLimit: 500,
   maxCommentLength: 5000,
@@ -57,7 +57,8 @@ function upperList(value, name, errors) {
   }
   const out = [];
   for (const raw of value) {
-    const key = String(raw).trim().toUpperCase();
+    if (typeof raw !== 'string') { errors.push(`${name} entries must be strings`); continue; }
+    const key = raw.trim().toUpperCase();
     if (!PROJECT_KEY.test(key)) errors.push(`${name}: invalid project key '${raw}'`);
     else if (!out.includes(key)) out.push(key);
   }
@@ -72,7 +73,8 @@ function stringList(value, name, errors, { lower = false } = {}) {
   }
   const out = [];
   for (const raw of value) {
-    let s = String(raw).trim();
+    if (typeof raw !== 'string' || !raw.trim()) { errors.push(`${name} entries must be nonempty strings`); continue; }
+    let s = raw.trim();
     if (lower) s = s.toLowerCase();
     if (s && !out.includes(s)) out.push(s);
   }
@@ -81,7 +83,7 @@ function stringList(value, name, errors, { lower = false } = {}) {
 
 function positiveInt(value, name, errors, max = 100000) {
   if (value === undefined) return undefined;
-  const n = Number(value);
+  const n = value;
   if (!Number.isInteger(n) || n < 1 || n > max) {
     errors.push(`${name} must be an integer between 1 and ${max}`);
     return undefined;
@@ -109,10 +111,15 @@ export function normalizePolicy(input = {}) {
     return { policy: clone(DEFAULT_POLICY), errors: ['policy must be an object'] };
   }
   const p = clone(DEFAULT_POLICY);
-
-  if (input.agentWritesPaused !== undefined) p.agentWritesPaused = input.agentWritesPaused === true;
-  if (input.requireDistinctApprover !== undefined) {
-    p.requireDistinctApprover = input.requireDistinctApprover !== false;
+  for (const key of Object.keys(input)) {
+    if (!Object.hasOwn(DEFAULT_POLICY, key)) errors.push(`unknown policy property '${key}'`);
+  }
+  if (input.version !== undefined && input.version !== 1) errors.push('unsupported policy version');
+  for (const key of ['agentWritesPaused', 'requireDistinctApprover']) {
+    if (input[key] !== undefined) {
+      if (typeof input[key] !== 'boolean') errors.push(`${key} must be a boolean`);
+      else p[key] = input[key];
+    }
   }
 
   const allowed = upperList(input.allowedProjects, 'allowedProjects', errors);

@@ -17,7 +17,15 @@ export function canonicalJson(value) {
 export function fingerprintOperation(op) {
   const material = {
     kind: op.kind,
-    targets: [...op.targets].map((t) => t.issueKey ?? `new:${t.projectKey}`).sort(),
+    targets: op.targets.map((t) => ({
+      issueKey: t.issueKey,
+      issueId: t.issueId,
+      projectKey: t.projectKey,
+      projectId: t.projectId,
+      transitionId: t.transitionId,
+      toStatusId: t.toStatusId,
+      toStatus: t.toStatus,
+    })).sort((a, b) => canonicalJson(a).localeCompare(canonicalJson(b))),
     payload: op.payload,
   };
   return createHash('sha256').update(canonicalJson(material)).digest('hex');

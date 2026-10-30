@@ -31,7 +31,7 @@ near-agent-spend-guard: per-agent policy, pending requests, audit). Here the "mo
 | Prize | How we qualify |
 |---|---|
 | Best Agents (Rovo) | `rovo:agent` + reusable `rovo:skill` + 10 `action` modules other agents can invoke |
-| Best app with Atlassian MCP | `rovo:mcp` exposes the same 10 tools; SKILL.md published in the repo for third-party agents |
+| Best app with Atlassian MCP | `rovo:mcp` declares the same 10 tools; MIT-licensed SKILL.md included for third-party agents (live exposure unverified) |
 | Teamwork Graph (stretch) | approval cards enriched with related work/owners from the Teamwork Graph API — not built yet |
 | Marketplace (stretch, user decision) | "submitted for listing" would qualify; needs a partner profile, privacy policy, support page |
 
@@ -54,35 +54,50 @@ NEEDS_APPROVAL (a human approver can say yes):
 - operation mode `approve`; **delete is floored to `approve`** even if a policy says `allow`
 - bulk: more than `bulkApprovalThreshold` issues (default 5)
 - protected fields (priority, fixVersions, security, duedate) / transitions into protected statuses (Done, Closed, Won't Do)
-- per-user hourly cap, per-user daily cap, per-site daily cap (counted in issues, so splitting a bulk change into
-  many small calls doesn't help)
+- per-user fixed UTC clock-hour cap, per-user calendar-day cap, per-site calendar-day cap
+  (attempted targets reserved before dispatch, including failed or uncertain writes)
 
 ## Approval protocol (`src/policy/approvals.js`)
 
-- A NEEDS_APPROVAL call **changes nothing** and returns `approvalId`. Identical repeat calls reuse the same pending request.
-- Request is bound to a **SHA-256 fingerprint** of the canonical operation (kind, sorted targets, payload).
+- A NEEDS_APPROVAL call **changes nothing in Jira** and returns `approvalId`. Identical repeat calls reuse the same pending request via a strongly consistent point index, independent of dashboard queries.
+- Request is bound to a **SHA-256 fingerprint** of the canonical operation: kind, payload, sorted targets, resolved issue/project IDs, and transition/destination IDs and names. Jira writes address stable issue/project IDs. Aliases resolving to the same issue are deduplicated; ambiguous transitions are refused.
+- The human review shows the requester, expiry, full exact payload, resolved targets and fingerprint as plain text.
 - **Approvers**: listed accountIds, or Jira administrators when the list is empty. **Two-person rule** on by default:
-  the requester cannot approve their own request (they can reject it).
+  the requester cannot approve their own request (an authorized requester can reject it).
 - Approved requests are **single-use** (atomic `FAIL_IF_EXISTS` claim key in KVS), **expire** (default 24 h), and
   can only be run by the **original requester** via `acg-run-approved-change`.
 - At run time the operation is re-resolved against Jira and **re-evaluated against the current policy**: a DENY
   (e.g. kill switch flipped) or any new non-rate risk code refuses the run (`DENIED_NOW` / `NEW_RISK`).
+  Resolution changes refuse with `FINGERPRINT_MISMATCH`; expiry is checked again after Jira reads and storage reservations,
+  immediately before dispatch. Changing the approver list or two-person setting invalidates earlier decisions (`AUTHORITY_CHANGED`).
 
 ## Identity and permissions
 
 - The acting user is always `context.accountId` from Forge, never an LLM-supplied input (per Rovo action docs).
 - All Jira calls use `api.asUser()`, so the gate can only **narrow** what the human could already do.
 - If the agent omits `issueKeys`, the issue the user is viewing (`payload.context.jira.issueKey`) is used.
-- Issue keys, account ids, dates and labels are regex-validated; path segments are `encodeURIComponent`-ed.
+- Issue keys, account ids, dates and labels are regex-validated; the Jira client also rejects unsafe issue references before applying `encodeURIComponent`.
+- This is a gate on this app's tools, not a site-wide Jira interceptor. An agent with other write tools can use those independently.
 
 ## Storage / audit (`src/store/`)
 
 Forge KVS only (no egress → eligible for "Runs on Atlassian"). Keys: `policy`, `req:<id>`, `open:<id>` (index),
-`claim:<id>`, `usage:*` (TTL), `audit:<inverted-ts>:<id>` and per-user `auditu:<acct>:…` (90-day TTL).
+`pending:<acct>:<fingerprint>` (point lookup), `claim:<id>`, `mutation-lock`, `usage:*` (TTL), `audit:<inverted-ts>:<id>` and per-user `auditu:<acct-hash>:…` (90-day TTL).
 Audit entries hold kind, issue keys, verdict, outcome, reason codes, approvalId — not comment bodies.
+Usage reservation and an `EXECUTION_STARTED` audit intent must succeed before Jira dispatch. A final outcome follows;
+if the invocation stops or a Jira response is lost, the intent remains and usage is not refunded. Approval records
+do contain full write payloads and currently have no retention purge.
 
-Known limitation: KVS has no atomic increment, so usage counters are last-write-wins under heavy concurrency
-(caps are approximate; single-use approval claims are exact).
+All mutations (policy updates, human decisions, queuing, previews, execution) acquire one installation-wide
+`FAIL_IF_EXISTS` storage lock. Contention returns `REFUSED` / `BUSY`. Counters are updated while holding the lock,
+before writes; failed attempts still count. The lock has no TTL, so a delayed invocation cannot outlive a lease
+and race a new owner. Termination can leave the gate locked; operator recovery requires confirming the old invocation
+has stopped before deleting the lock. There is no automatic recovery or agent-accessible unlock. This favors
+fail-closed safety over throughput/availability; see `STATUS.md` before live use.
+
+Per-call bulk limits apply to the submitted call. The gate cannot infer a logical task across separate calls;
+several small calls below aggregate caps can still avoid a per-call bulk approval. Hourly buckets reset on UTC
+clock-hour boundaries. Jira configuration/project changes are not transactional with the gate's reads and writes.
 
 ## Module layout
 

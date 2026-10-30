@@ -1,9 +1,13 @@
-// Forge KVS adapter. Only imported by src/index.js (the Forge entry point), never by tests.
-import { kvs, WhereConditions } from '@forge/kvs';
+// Forge KVS adapter. SDK objects are injected by the Forge entry point.
 
 export class KvsStore {
+  constructor(kvs, whereConditions) {
+    this.kvs = kvs;
+    this.whereConditions = whereConditions;
+  }
+
   async get(key) {
-    return kvs.get(key);
+    return this.kvs.get(key);
   }
 
   async set(key, value, { failIfExists = false, ttlSeconds } = {}) {
@@ -11,26 +15,31 @@ export class KvsStore {
     if (failIfExists) options.keyPolicy = 'FAIL_IF_EXISTS';
     if (ttlSeconds) options.ttl = { unit: 'SECONDS', value: ttlSeconds };
     try {
-      await kvs.set(key, value, options);
+      await this.kvs.set(key, value, options);
       return true;
     } catch (err) {
       // TODO(verify on a real site): exact error code KVS raises for FAIL_IF_EXISTS conflicts.
       const code = String(err?.code ?? err?.name ?? err?.message ?? '');
-      if (failIfExists && /exist|conflict|precondition/i.test(code)) return false;
+      if (failIfExists && (err?.status === 409 || err?.statusCode === 409 || /exist|conflict|precondition/i.test(code))) return false;
       throw err;
     }
   }
 
   async delete(key) {
-    await kvs.delete(key);
+    await this.kvs.delete(key);
   }
 
   async list(prefix, limit = 50) {
-    const { results } = await kvs
+    return (await this.listPage(prefix, limit)).results;
+  }
+
+  async listPage(prefix, limit = 50, cursor) {
+    let query = this.kvs
       .query()
-      .where('key', WhereConditions.beginsWith(prefix))
-      .limit(limit)
-      .getMany();
-    return results.map((r) => ({ key: r.key, value: r.value }));
+      .where('key', this.whereConditions.beginsWith(prefix))
+      .limit(limit);
+    if (cursor) query = query.cursor(cursor);
+    const { results, nextCursor } = await query.getMany();
+    return { results: results.map((r) => ({ key: r.key, value: r.value })), nextCursor };
   }
 }

@@ -48,3 +48,13 @@ test('day boundary follows the policy timezone', () => {
   assert.equal(dayKey(t, 'Asia/Singapore'), '2026-10-31');
   assert.equal(hourKey(t), '2026-10-30T20');
 });
+
+test('strict schema rejects coercion, unknown properties, versions and malformed lists', () => {
+  for (const input of [
+    { agentWritesPaused: 'true' }, { requireDistinctApprover: 0 },
+    { perActorHourlyLimit: '30' }, { perActorHourlyLimit: true },
+    { version: 2 }, { allowedProject: ['DEMO'] },
+    { allowedProjects: [null] }, { approvers: [123] },
+    { protectedStatuses: [''] }, { protectedFields: [{}] },
+  ]) assert.ok(normalizePolicy(input).errors.length, JSON.stringify(input));
+});

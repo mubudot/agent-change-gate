@@ -3,7 +3,8 @@
 import { ISSUE_KEY } from './policy/ops.js';
 
 export function actorFrom(payload, context) {
-  return context?.accountId ?? context?.principal?.accountId ?? payload?.context?.accountId ?? null;
+  const actor = context?.accountId;
+  return typeof actor === 'string' && /^[A-Za-z0-9:_-]{1,128}$/.test(actor) ? actor : null;
 }
 
 /** If the agent omitted issueKeys but the user is looking at an issue, use that issue. */

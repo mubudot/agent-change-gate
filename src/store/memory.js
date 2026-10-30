@@ -30,4 +30,13 @@ export class MemoryStore {
       .slice(0, limit)
       .map((key) => ({ key, value: JSON.parse(this.map.get(key)) }));
   }
+
+  async listPage(prefix, limit = 50, cursor) {
+    const entries = await this.list(prefix, this.map.size);
+    const start = Number(cursor ?? 0);
+    return {
+      results: entries.slice(start, start + limit),
+      nextCursor: start + limit < entries.length ? String(start + limit) : undefined,
+    };
+  }
 }
