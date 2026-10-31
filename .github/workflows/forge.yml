@@ -92,8 +92,10 @@ jobs:
           PROMPTS: ${{ inputs.prompts }}
         run: |
           test -n "$SITE" || { echo "site input required"; exit 1; }
+          # The probe checks the development deployment's agent (app + environment ids in the script).
+          test "$FORGE_ENV" = development || { echo "rovo-probe checks the development environment only"; exit 1; }
           IFS=$'\n' read -r -d '' -a P < <(printf '%s' "$PROMPTS" | sed 's/||/\n/g'; printf '\0') || true
-          ROVO_AGENT_DUMP=1 node scripts/rovo-probe.mjs "$SITE" "${P[@]}"
+          node scripts/rovo-probe.mjs "$SITE" "${P[@]}"
       - name: logs
         if: inputs.action == 'logs'
         run: npx --yes @forge/cli@15 logs -e "$FORGE_ENV" --since 1h --limit 200

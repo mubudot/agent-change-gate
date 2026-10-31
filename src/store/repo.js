@@ -134,11 +134,17 @@ export class Repo {
   /** The actor's own approved, unexpired, not-yet-run agent requests (newest first). */
   async listApprovedFor(actor, limit = 20, now = Date.now()) {
     if (!actor) return [];
-    const entries = await this.store.list(`okreq:${actorKey(actor)}:`, limit);
-    const reqs = await Promise.all(entries.map((e) => this.getRequest(e.value)));
-    return reqs
-      .filter((r) => r && r.requester === actor && withExpiry(r, now).status === Status.APPROVED)
-      .sort((a, b) => b.createdAt - a.createdAt);
+    // Expired entries linger in the index until their TTL, so page until enough live ones are found.
+    const visible = [];
+    let cursor;
+    let pages = 0;
+    do {
+      const page = await this.store.listPage(`okreq:${actorKey(actor)}:`, 50, cursor);
+      const reqs = await Promise.all(page.results.map((e) => this.getRequest(e.value)));
+      for (const r of reqs) if (r && r.requester === actor && withExpiry(r, now).status === Status.APPROVED) visible.push(r);
+      cursor = page.nextCursor;
+    } while (cursor && visible.length < limit && ++pages < 20);
+    return visible.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
   }
 
   async findPending(actor, fingerprint, now, origin) {

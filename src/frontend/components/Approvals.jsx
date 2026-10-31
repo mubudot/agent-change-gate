@@ -45,7 +45,7 @@ function ReviewModal({ request, data, onClose, onDecided }) {
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
   const [message, setMessage] = useState(null);
-  const ownRequest = data.policy.requireDistinctApprover && request.requester === data.actor;
+  const ownRequest = data.policy.requireDistinctApprover && request.requester === data.actor && request.status === 'PENDING';
   const canDecide = data.isApprover && request.status === 'PENDING';
 
   const decide = async (approve) => {

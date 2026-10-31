@@ -131,3 +131,17 @@ test('rovo-probe never sends the developer credentials to a non-Atlassian host',
     assert.match(r.stderr, /refusing to send credentials/);
   }
 });
+
+test('approved list pages past expired index entries', async () => {
+  const { svc, as, advance } = await setup({ policy: { perActorHourlyLimit: 1000, perActorDailyLimit: 1000 } });
+  const approveAs = async (id) => { as(BOB); await svc.decideRequest(id, true, 'ok', BOB); as(ALICE); };
+  for (let i = 0; i < 25; i++) {
+    const p = await svc.guardedChange('jira.issue.delete', { issueKeys: 'DEMO-2', preview: false }, ALICE);
+    await approveAs(p.approvalId);
+    advance(25 * 60 * 60 * 1000); // each one expires before the next is requested
+  }
+  const live = await svc.guardedChange('jira.issue.delete', { issueKeys: 'DEMO-3' }, ALICE);
+  await approveAs(live.approvalId);
+  const dash = await svc.dashboard(ALICE);
+  assert.deepEqual(dash.myApproved.map((r) => r.id), [live.approvalId]);
+});
