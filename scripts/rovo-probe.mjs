@@ -32,12 +32,20 @@ const cloudId = tenant.json?.cloudId;
 console.log('cloudId', cloudId ?? `(none, HTTP ${tenant.status})`);
 const rovo = { 'x-cloudid': cloudId, 'x-experience-id': 'ai-mate', 'x-product': 'rovo' };
 
-const agents = await call('GET', '/gateway/api/assist/rovo/v1/agents?limit=100', { headers: rovo });
-console.log('agents HTTP', agents.status);
-const list = agents.json?.values ?? agents.json?.agents ?? agents.json?.data ?? (Array.isArray(agents.json) ? agents.json : []);
-const ours = list.find((a) => a?.name === AGENT_NAME);
-console.log('agent count', list.length, '| ours:', ours ? JSON.stringify({ id: ours.id, name: ours.name, ...ours.external_config_reference ? { ref: ours.external_config_reference } : {} }) : 'NOT FOUND');
-if (!ours) console.log(clip(agents.text, 2500));
+// The agents list is paged; follow the cursor until our agent shows up.
+let ours;
+let seen = 0;
+let cursor = '';
+for (let page = 0; page < 20 && !ours; page++) {
+  const agents = await call('GET', `/gateway/api/assist/rovo/v1/agents?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, { headers: rovo });
+  const list = agents.json?.items ?? agents.json?.values ?? [];
+  if (page === 0) console.log('agents HTTP', agents.status, '| page keys:', Object.keys(agents.json ?? {}).join(','));
+  seen += list.length;
+  ours = list.find((a) => a?.name === AGENT_NAME);
+  cursor = agents.json?.next_cursor ?? agents.json?.cursor ?? agents.json?.next ?? '';
+  if (!cursor || !list.length) break;
+}
+console.log('agents seen', seen, '| ours:', ours ? JSON.stringify({ id: ours.id, named_id: ours.named_id, creator_type: ours.creator_type, plugins: Object.keys(ours.available_plugins ?? {}), model: ours.execution_config?.model_display_name }) : 'NOT FOUND');
 if (!ours || !prompts.length) process.exit(ours ? 0 : 2);
 
 const convo = await call('POST', '/gateway/api/assist/rovo/v1/chat/conversation', { headers: rovo, body: {} });
