@@ -25,6 +25,7 @@ const variables = {
   input: {
     contextIds: [`ari:cloud:jira::site/${cloudId}`],
     extensionId,
+    entryPoint: process.env.UI_ENTRY ?? 'resolver',
     payload: {
       call: { functionKey, payload: JSON.parse(json) },
       context: { cloudId, moduleKey: MODULE_KEY, siteUrl: base, extension: { type: 'jira:globalPage' } },
