@@ -55,6 +55,8 @@ export function parseTurn(text, envId = DEV_ENV_ID) {
 /** Why a turn does not count as a successful agent answer, or null if it does. */
 export function turnProblem(turn) {
   if (!turn.hasFinal) return 'stream ended without a final response';
+  const failed = turn.tools.filter((t) => t.error);
+  if (failed.length) return `tool call failed: ${failed.map((t) => `${t.name}: ${t.error}`).join('; ')}`;
   if (!turn.finalText && !turn.planned.length) return 'final response has neither text nor a planned action of ours';
   return null;
 }

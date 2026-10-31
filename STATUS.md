@@ -3,8 +3,10 @@
 Deployed to Forge **production** (v2.1.0, 2026-10-31, the version the judge install link installs) and to the
 development environment, which is installed on a free Jira Cloud test site. The global page (approvals, policy,
 audit log, kill switch, simulation panel) and the context-aware gate (Jira release facts, Teamwork Graph reads) were
-exercised there with live issues. Not submitted to Devpost or the Marketplace. Rovo agent / MCP behaviour is not
-verified from a Rovo chat or an external MCP client (Rovo chat is not available on the free test site).
+exercised there with live issues. Not submitted to Devpost or the Marketplace. The Rovo agent was run in a real Rovo
+conversation on a Forge demo site (development environment, see `docs/ROVO_CHAT_RUN.md`); the Rovo Confirm click, the
+approve-in-page → run-from-chat round trip and an external MCP client are not verified. Production is still v2.1.0:
+the Rovo hand-off changes of 2026-10-31 are in development only.
 
 ## Review (2026-10-30)
 
@@ -20,7 +22,7 @@ verified from a Rovo chat or an external MCP client (Rovo chat is not available 
 | P2 | Pending deduplication depended on the first 100 eventually consistent query results; expired/other users' entries could hide active requests. | Strong point index for deduplication; queue scans cursor pages and filters expiry/visibility before applying its display limit. |
 | P3 | Documentation overstated audit/cap guarantees and deletion always queuing; one scope was unused. | README, DESIGN, prompt and skill now describe dispatch intent, attempted-target counting, fixed buckets, scope of enforcement and refusal codes. Removed `read:jira-user`; documented mypermissions classic scope is `read:jira-work`. |
 
-Local checks: **149 tests passing** (as of 2026-10-31, after Codex review round 5) with `node --test test/*.test.js` on Node 22.23.3;
+Local checks: **161 tests passing** (as of 2026-10-31, after the Rovo hand-off review rounds) with `node --test test/*.test.js` on Node 22.23.3;
 `FORGE_CLI_DIR=../work/forge-cli node scripts/validate-manifest.cjs` passes against the bundled CLI schema.
 Unit tests exercise pure policy, approval flows, deterministic races, storage failures, Jira routing and SDK-adapter contracts.
 They do not execute the Forge runtime or mount UI Kit; the Forge runtime was exercised separately by the development deploys (see Live site notes).
@@ -51,7 +53,8 @@ They do not execute the Forge runtime or mount UI Kit; the Forge runtime was exe
   approver configuration changes; it does not recheck a past approver's Jira-admin membership as another user at run time.
 - Submission still requires a public demo video, a public repository and the Devpost submission. The production
   deploy and the judge installation link exist (setup steps in README). The manifest/skill support the intended
-  Agents/MCP bonus entries; a live Rovo chat run and an external MCP client run are not verified. Teamwork Graph
+  Agents/MCP bonus entries; a Rovo chat run is verified for read tools and write planning (see `docs/ROVO_CHAT_RUN.md`),
+  an external MCP client run is not. Teamwork Graph
   context is implemented (curated queries, read as the user). A Marketplace listing is drafted but deliberately not
   submitted (submitting would replace the private distribution link judges use).
 
@@ -147,3 +150,20 @@ pagination gaps, bounded graph reads, run-time context outage is NEW_RISK unless
 Round 4: no material issues, one P3 (Teamwork Graph listed as a checked source when no Graph query succeeded), fixed by
 returning per-family `answered` coverage from the client and deriving `sources` from it (+2 regression tests).
 Round 5: no findings; 149 tests passing.
+
+## Rovo chat and page hand-off (2026-10-31)
+
+- Forge demo site (`forge site provision`: Enterprise Jira + Rovo, 90 days) with the development app installed.
+  `scripts/rovo-probe.mjs` (workflow `action: rovo-probe`) checks the agent is this app's `change-gate-agent` module in
+  the development environment with all 11 actions, then chats with it through Rovo's chat service. Verified: policy
+  summary and issue context answered from live data (`MOBL-12 blocks 5 open issues`, Jira + Teamwork Graph), and a
+  transition planned with the right input and held by Rovo for the user's Confirm. Details: `docs/ROVO_CHAT_RUN.md`.
+- New: `PENDING_APPROVAL` / `approval-status` carry `approvalPage` (link to this app's Jira page from the Forge app
+  context, `src/rovo/links.js`) and `nextStep`; the page has **Ask Change Gate Agent** and, for the requester's own
+  approved request, **Run it from Rovo chat** (Forge bridge `rovo.open`, hidden when Rovo is off). Requesters now see
+  their approved, not-yet-run requests (`okreq:` index, newest first, pruned when expired, bounded scan of 20 pages).
+- Not possible from CI: UI resolvers reject calls without a Forge context token, so approvals need a person on the page.
+- Codex review: round 1 (2 P1: probe could send credentials to any host; the run-from-chat button was unreachable
+  because approved requests left the dashboard), round 2 (index pagination, probe identity, empty finals, prod/dev
+  mismatch), round 3 (index ordering/pruning, test that did not paginate, tool errors passing the probe). All fixed
+  with tests. Further rounds: see `work/` review logs referenced in the project STATE.

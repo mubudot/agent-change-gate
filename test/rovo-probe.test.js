@@ -43,5 +43,7 @@ test('turn parsing: answers, our planned actions, and malformed finals', () => {
   assert.match(turnProblem(parseTurn(stream(final({ content: '   ' })))), /neither text/);
   assert.match(turnProblem(parseTurn(stream(final({ content: { not: 'text' } })))), /neither text/);
   assert.match(turnProblem(parseTurn('not json\n{broken')), /without a final response/);
+  const broken = parseTurn(stream(final({ content: 'Sorry, something went wrong.', plugin_invocations: [{ plugin_display_name: 'Check issue context', plugin_error_message: 'Function threw' }] })));
+  assert.match(turnProblem(broken), /tool call failed: Check issue context: Function threw/);
   assert.match(turnProblem(parseTurn(stream({ type: 'ANSWER_PART', message: { content: 'partial' } }))), /without a final response/);
 });

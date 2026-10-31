@@ -10,6 +10,8 @@ export const LOCK_BUCKET_MS = 120_000;
 export const LOCK_LEASE_MS = 60_000; // > Forge's 25 s default invocation limit, < LOCK_BUCKET_MS
 const actorKey = (actor) => createHash('sha256').update(actor).digest('hex');
 // Dedup index per origin: agent requests keep the original key; simulations get their own, so the two never collide.
+// Requester's approved-request index, newest first (inverted creation time), one key per request.
+const approvedKey = (req) => `okreq:${actorKey(req.requester)}:${String(MAX_TS - req.createdAt).padStart(13, '0')}:${req.id}`;
 const pendingKey = (requester, fingerprint, origin) =>
   origin?.source === 'simulated' ? `pending:${requester}:${fingerprint}:sim:${origin.simulation?.mode ?? 'dry-run'}` : `pending:${requester}:${fingerprint}`;
 
@@ -124,27 +126,36 @@ export class Repo {
       else await this.store.delete(`simok:${req.id}`);
     } else {
       // Approved agent requests stay visible to their requester (page -> "Run it from Rovo chat") until run.
-      // TTL outlives the longest approval TTL (7 days); expiry itself is decided by withExpiry, not by the TTL.
-      const key = `okreq:${actorKey(req.requester)}:${req.id}`;
+      // Newest first by key order; TTL outlives the longest approval TTL (7 days); expiry itself is decided by withExpiry.
+      const key = approvedKey(req);
       if (req.status === Status.APPROVED) await this.store.set(key, req.id, { ttlSeconds: 8 * 86400 });
       else await this.store.delete(key);
     }
   }
 
-  /** The actor's own approved, unexpired, not-yet-run agent requests (newest first). */
+  /**
+   * The actor's own approved, unexpired, not-yet-run agent requests, newest first.
+   * Keys sort newest first, so live approvals come before older expired ones; entries found expired are
+   * dropped from the index as they are seen. The scan is bounded (20 pages of 50).
+   */
   async listApprovedFor(actor, limit = 20, now = Date.now()) {
     if (!actor) return [];
-    // Expired entries linger in the index until their TTL, so page until enough live ones are found.
     const visible = [];
+    const stale = [];
     let cursor;
     let pages = 0;
     do {
       const page = await this.store.listPage(`okreq:${actorKey(actor)}:`, 50, cursor);
       const reqs = await Promise.all(page.results.map((e) => this.getRequest(e.value)));
-      for (const r of reqs) if (r && r.requester === actor && withExpiry(r, now).status === Status.APPROVED) visible.push(r);
+      for (const [i, r] of reqs.entries()) {
+        if (r && r.requester === actor && withExpiry(r, now).status === Status.APPROVED) visible.push(r);
+        else stale.push(page.results[i].key);
+      }
       cursor = page.nextCursor;
     } while (cursor && visible.length < limit && ++pages < 20);
-    return visible.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
+    // Prune after the scan, so deletions never shift the cursor of the pages still being read.
+    await Promise.all(stale.map((k) => this.store.delete(k)));
+    return visible.slice(0, limit);
   }
 
   async findPending(actor, fingerprint, now, origin) {

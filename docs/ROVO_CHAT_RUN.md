@@ -1,7 +1,7 @@
 # Rovo chat run (2026-10-31)
 
 A real Rovo conversation with **Change Gate Agent**, on a Forge demo development site (`forge site provision`,
-Enterprise Jira + Rovo, seeded data), development environment v3.5.0. Rovo's own model (Gemini 3 Flash on this site)
+Enterprise Jira + Rovo, seeded data), development environment (v3.5.0 for the transcript below; re-run on v3.7.0). Rovo's own model (Gemini 3 Flash on this site)
 chose the tools; the app's Forge actions ran as the signed-in user and read Jira and Teamwork Graph.
 
 How it was driven: `scripts/rovo-probe.mjs`, run from the `forge` GitHub workflow (`action: rovo-probe`). It sends each

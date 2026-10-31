@@ -132,16 +132,30 @@ test('rovo-probe never sends the developer credentials to a non-Atlassian host',
   }
 });
 
-test('approved list pages past expired index entries', async () => {
-  const { svc, as, advance } = await setup({ policy: { perActorHourlyLimit: 1000, perActorDailyLimit: 1000 } });
+test('approved list pages past expired index entries and prunes them', async () => {
+  const caps = { allowedProjects: ['DEMO'], perActorHourlyLimit: 1000, perActorDailyLimit: 1000, siteDailyLimit: 1000 };
+  const { svc, repo, store, as, advance } = await setup({ policy: caps });
   const approveAs = async (id) => { as(BOB); await svc.decideRequest(id, true, 'ok', BOB); as(ALICE); };
-  for (let i = 0; i < 25; i++) {
-    const p = await svc.guardedChange('jira.issue.delete', { issueKeys: 'DEMO-2', preview: false }, ALICE);
-    await approveAs(p.approvalId);
-    advance(25 * 60 * 60 * 1000); // each one expires before the next is requested
-  }
+  // One approval that stays valid for 24 h ...
   const live = await svc.guardedChange('jira.issue.delete', { issueKeys: 'DEMO-3' }, ALICE);
   await approveAs(live.approvalId);
-  const dash = await svc.dashboard(ALICE);
+  // ... then 60 newer approvals with a 1-minute TTL that expire, so the live one sits behind a full page.
+  assert.equal((await repo.savePolicy({ ...caps, approvalTtlMinutes: 1 })).ok, true);
+  for (let i = 0; i < 60; i++) {
+    advance(1000);
+    const p = await svc.guardedChange('jira.issue.delete', { issueKeys: 'DEMO-2' }, ALICE);
+    await approveAs(p.approvalId);
+  }
+  advance(2 * 60 * 1000);
+  const pages = [];
+  const listPage = store.listPage.bind(store);
+  store.listPage = async (prefix, limit, cursor) => { if (prefix.startsWith('okreq:')) pages.push(cursor); return listPage(prefix, limit, cursor); };
+  let dash = await svc.dashboard(ALICE);
   assert.deepEqual(dash.myApproved.map((r) => r.id), [live.approvalId]);
+  assert.ok(pages.length >= 2, `scanned ${pages.length} page(s)`);
+  // Expired entries were pruned while scanning: the next load needs one page.
+  pages.length = 0;
+  dash = await svc.dashboard(ALICE);
+  assert.deepEqual(dash.myApproved.map((r) => r.id), [live.approvalId]);
+  assert.equal(pages.length, 1);
 });
