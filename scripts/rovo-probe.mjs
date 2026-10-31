@@ -27,6 +27,21 @@ async function call(method, path, { body, headers = {}, raw = false } = {}) {
   return { status: res.status, json, text };
 }
 
+// "peek" lists projects and a few issues with release / link facts, to pick demo issues.
+if (prompts[0] === 'peek') {
+  const projects = await call('GET', '/rest/api/3/project/search?maxResults=50');
+  for (const p of projects.json?.values ?? []) console.log('PROJECT', p.key, '|', p.name, '|', p.projectTypeKey);
+  const jql = encodeURIComponent(prompts[1] ?? 'statusCategory != Done ORDER BY updated DESC');
+  const issues = await call('GET', `/rest/api/3/search/jql?jql=${jql}&maxResults=40&fields=summary,status,priority,fixVersions,issuelinks,issuetype`);
+  console.log('search HTTP', issues.status, issues.json ? '' : clip(issues.text, 300));
+  for (const i of issues.json?.issues ?? []) {
+    const f = i.fields;
+    const fv = (f.fixVersions ?? []).map((v) => `${v.name}${v.releaseDate ? '@' + v.releaseDate : ''}${v.released ? '(released)' : ''}`).join(',');
+    const blocks = (f.issuelinks ?? []).filter((l) => l.outwardIssue && /block/i.test(l.type?.outward ?? '')).map((l) => l.outwardIssue.key).join(',');
+    console.log('ISSUE', i.key, '|', f.issuetype?.name, '|', f.status?.name, '|', f.priority?.name, '| fix:', fv || '-', '| blocks:', blocks || '-', '|', clip(f.summary ?? '', 70));
+  }
+  process.exit(0);
+}
 const tenant = await call('GET', '/_edge/tenant_info');
 const cloudId = tenant.json?.cloudId;
 console.log('cloudId', cloudId ?? `(none, HTTP ${tenant.status})`);
