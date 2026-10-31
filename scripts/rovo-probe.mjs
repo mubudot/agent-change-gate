@@ -84,5 +84,5 @@ for (const prompt of prompts) {
     if (acts) console.log('ACTION EVENT', clip(JSON.stringify(acts), 1200));
   }
   console.log('<<< AGENT:', clip(finalText || '(no text parsed)', 3000));
-  if (!finalText) console.log('RAW', clip(msg.text, 3000));
+  if (process.env.ROVO_RAW || !finalText) console.log('RAW HEAD', clip(msg.text, 4000), '\nRAW TAIL', msg.text.slice(-4000));
 }
