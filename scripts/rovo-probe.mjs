@@ -55,24 +55,28 @@ if (!convoId) process.exit(3);
 
 for (const prompt of prompts) {
   console.log('\n>>> USER:', prompt);
-  const msg = await call('POST', `/gateway/api/assist/rovo/v1/chat/conversation/${convoId}/message/stream`, {
-    headers: { ...rovo, Accept: 'text/event-stream' },
-    raw: true,
-    body: {
-      recipient_agent_named_id: ours.named_id ?? ours.namedId,
-      agent_id: ours.id,
-      content: { version: 1, type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: prompt }] }] },
-      mimeType: 'text/adf',
-      context: {},
-    },
-  });
+  // The web client streams the reply; try the request shapes it has used (first one that is accepted wins).
+  const adf = { version: 1, type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: prompt }] }] };
+  const shapes = [
+    { accept: '*/*', body: { recipient_agent_named_id: ours.named_id, agent_id: ours.id, content: adf, mimeType: 'text/adf', context: {} } },
+    { accept: 'application/json', body: { recipient_agent_named_id: ours.named_id, agent_id: ours.id, content: adf, mimeType: 'text/adf', context: {} } },
+    { accept: '*/*', body: { recipient_agent_named_id: ours.named_id, content: prompt, mimeType: 'text/markdown', context: {} } },
+  ];
+  let msg;
+  for (const shape of shapes) {
+    msg = await call('POST', `/gateway/api/assist/rovo/v1/chat/conversation/${convoId}/message/stream`, {
+      headers: { ...rovo, Accept: shape.accept }, raw: true, body: shape.body,
+    });
+    if (msg.status === 200) break;
+    console.log('shape rejected', shape.accept, typeof shape.body.content, 'HTTP', msg.status, clip(msg.text, 600));
+  }
   console.log('message HTTP', msg.status);
   // Print the final answer text and any action/tool events; keep the raw tail for debugging.
-  const lines = msg.text.split('\n').filter((l) => l.startsWith('data:'));
+  const lines = msg.text.split('\n').map((l) => (l.startsWith('data:') ? l.slice(5) : l)).filter((l) => l.trim().startsWith('{'));
   let finalText = '';
   for (const l of lines) {
     let ev;
-    try { ev = JSON.parse(l.slice(5)); } catch { continue; }
+    try { ev = JSON.parse(l); } catch { continue; }
     const m = ev?.message ?? ev;
     const t = typeof m?.content === 'string' ? m.content : '';
     if (t) finalText = t;
