@@ -9,6 +9,7 @@ import { resolveOperation, executeOperation, outcomeOf } from './jira/executor.j
 import { graphForSimulation, jiraForSimulation, simulateRequest, runSimulatedRequest } from './simulation/simulator.js';
 import { EMPTY_CONTEXT, collectContext, contextApplies, signalKey } from './context/collector.js';
 import { parseIssueKeys } from './policy/ops.js';
+import { approvalPlace } from './rovo/links.js';
 
 // Approval reasons a human approval is allowed to cover at run time even if their
 // exact numbers changed (usage moves between request and execution).
@@ -18,19 +19,21 @@ export class GateService {
   /**
    * @param {{repo: import('./store/repo.js').Repo, jira: import('./jira/client.js').JiraClient,
    *          graph?: import('./context/graph-client.js').TeamworkGraphClient,
-   *          now?: () => number, newId?: () => string}} deps
+   *          now?: () => number, newId?: () => string, approvalPage?: () => string | null}} deps
+   *   approvalPage: site-relative path of the approval page (from the Forge app context), or null.
    */
-  constructor({ repo, jira, graph = null, now = () => Date.now(), newId }) {
+  constructor({ repo, jira, graph = null, now = () => Date.now(), newId, approvalPage = () => null }) {
     this.repo = repo;
     this.jira = jira;
     this.graph = graph;
+    this.approvalPage = approvalPage;
     this.now = now;
     this.newId = newId ?? (() => globalThis.crypto.randomUUID());
   }
 
   /** Same repo, clock and ids, different Jira (and graph) client (used for dry-run simulations). */
   withJira(jira, graph = this.graph) {
-    return new GateService({ repo: this.repo, jira, graph, now: this.now, newId: this.newId });
+    return new GateService({ repo: this.repo, jira, graph, now: this.now, newId: this.newId, approvalPage: this.approvalPage });
   }
 
   /**
@@ -93,12 +96,14 @@ export class GateService {
         if (origin.simulation) await this.repo.indexSimulation(req.id, now);
         await this.audit({ actor, op, verdict: decision.verdict, outcome: 'QUEUED', reasons: decision.reasons, approvalId: req.id, origin });
       }
+      const page = this.pagePath();
       return out('PENDING_APPROVAL', {
         ...base,
         approvalId: req.id,
         expiresAt: new Date(req.expiresAt).toISOString(),
+        ...(page ? { approvalPage: page } : {}),
         message:
-          'Nothing was changed. A human approver must approve this request on the Agent Change Gate page in Jira (Apps menu). ' +
+          `Nothing was changed. A human approver must approve this request on ${approvalPlace(page)}. ` +
           `After approval, call run-approved-change with approvalId ${req.id}.`,
       });
     }
@@ -237,13 +242,26 @@ export class GateService {
     const req = await this.repo.getRequest(approvalId);
     if (!req || req.requester !== actor) return out('INVALID', { errors: [`no approval request '${approvalId}' for you`] });
     const r = withExpiry(req, this.now());
+    const page = this.pagePath();
     return out('OK', {
       approvalId,
       approvalStatus: r.status,
       reasons: r.reasons,
       decisionNote: r.decisionNote,
       expiresAt: new Date(r.expiresAt).toISOString(),
+      ...(page ? { approvalPage: page } : {}),
+      nextStep: nextStep(r.status, approvalId, page),
     });
+  }
+
+  /** Approval page path, or null; a broken app context must never fail a gate call. */
+  pagePath() {
+    try {
+      const p = this.approvalPage();
+      return typeof p === 'string' && p.startsWith('/jira/apps/') ? p : null;
+    } catch {
+      return null;
+    }
   }
 
   // ---------- approver / admin side (UI resolvers) ----------
@@ -485,6 +503,22 @@ function previewMessage(d) {
   if (d.verdict === Verdict.ALLOW) return 'This change would run immediately.';
   if (d.verdict === Verdict.NEEDS_APPROVAL) return 'This change would need a human approval first.';
   return 'This change would be blocked.';
+}
+
+/** What the agent should do next for an approval request in this status (plain words for the LLM). */
+function nextStep(status, approvalId, page) {
+  switch (status) {
+    case Status.PENDING:
+      return `Still waiting for a human approver on ${approvalPlace(page)}. Nothing has changed.`;
+    case Status.APPROVED:
+      return `Approved. Call run-approved-change with approvalId ${approvalId} to run it once.`;
+    case Status.REJECTED:
+      return 'Rejected by a human approver. Do not retry; tell the user and include the decision note if there is one.';
+    case Status.EXPIRED:
+      return 'Expired before it was run. Nothing changed; ask the user whether to request a new approval.';
+    default:
+      return 'This approval was already used or closed. Check my-activity for the outcome; do not run it again.';
+  }
 }
 
 function out(status, rest = {}) {

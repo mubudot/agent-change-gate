@@ -6,7 +6,7 @@ on:
         description: Forge action
         required: true
         type: choice
-        options: [whoami, register, deploy, install, logs, site-provision, rovo-probe, ui-invoke]
+        options: [whoami, register, deploy, install, logs, site-provision, rovo-probe]
       site:
         description: Atlassian site for install (e.g. example.atlassian.net), or "demo" for the Forge demo site
         required: false
@@ -93,17 +93,7 @@ jobs:
         run: |
           test -n "$SITE" || { echo "site input required"; exit 1; }
           IFS=$'\n' read -r -d '' -a P < <(printf '%s' "$PROMPTS" | sed 's/||/\n/g'; printf '\0') || true
-          ROVO_CONFIRM=1 node scripts/rovo-probe.mjs "$SITE" "${P[@]}"
-      - name: ui-invoke
-        if: inputs.action == 'ui-invoke'
-        env:
-          SITE: ${{ inputs.site }}
-          CALL: ${{ inputs.prompts }}
-        # prompts = "<functionKey>||<json payload>"; development environment only.
-        run: |
-          test "$FORGE_ENV" = development || { echo "ui-invoke is for the development environment only"; exit 1; }
-          FN="${CALL%%||*}"; JSON="${CALL#*||}"; [ "$JSON" = "$CALL" ] && JSON='{}'
-          node scripts/ui-invoke.mjs "$SITE" fb72e4c2-07b3-4fdf-9ba0-876c0e692990 "$FN" "$JSON"
+          node scripts/rovo-probe.mjs "$SITE" "${P[@]}"
       - name: logs
         if: inputs.action == 'logs'
         run: npx --yes @forge/cli@15 logs -e "$FORGE_ENV" --since 1h --limit 200

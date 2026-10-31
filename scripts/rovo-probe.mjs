@@ -6,6 +6,7 @@
 //
 // usage: node scripts/rovo-probe.mjs <site-host> ["prompt" ...]
 //   Several prompts are sent in order into ONE conversation.
+//   node scripts/rovo-probe.mjs <site-host> peek ["JQL"]   lists projects and issues to pick test data.
 const [site, ...prompts] = process.argv.slice(2);
 if (!site) throw new Error('usage: rovo-probe.mjs <site-host> [prompt...]');
 const auth = 'Basic ' + Buffer.from(`${process.env.FORGE_EMAIL}:${process.env.FORGE_API_TOKEN}`).toString('base64');
@@ -70,21 +71,13 @@ if (!convoId) process.exit(3);
 
 for (const prompt of prompts) {
   console.log('\n>>> USER:', prompt);
-  // The web client streams the reply; try the request shapes it has used (first one that is accepted wins).
+  // Same request shape as the Rovo web client: ADF content addressed to our agent; reply is streamed.
   const adf = { version: 1, type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: prompt }] }] };
-  const shapes = [
-    { accept: '*/*', body: { recipient_agent_named_id: ours.named_id, agent_id: ours.id, content: adf, mimeType: 'text/adf', context: {} } },
-    { accept: 'application/json', body: { recipient_agent_named_id: ours.named_id, agent_id: ours.id, content: adf, mimeType: 'text/adf', context: {} } },
-    { accept: '*/*', body: { recipient_agent_named_id: ours.named_id, content: prompt, mimeType: 'text/markdown', context: {} } },
-  ];
-  let msg;
-  for (const shape of shapes) {
-    msg = await call('POST', `/gateway/api/assist/rovo/v1/chat/conversation/${convoId}/message/stream`, {
-      headers: { ...rovo, Accept: shape.accept }, raw: true, body: shape.body,
-    });
-    if (msg.status === 200) break;
-    console.log('shape rejected', shape.accept, typeof shape.body.content, 'HTTP', msg.status, clip(msg.text, 600));
-  }
+  const msg = await call('POST', `/gateway/api/assist/rovo/v1/chat/conversation/${convoId}/message/stream`, {
+    headers: { ...rovo, Accept: '*/*' },
+    raw: true,
+    body: { recipient_agent_named_id: ours.named_id, agent_id: ours.id, content: adf, mimeType: 'text/adf', context: {} },
+  });
   console.log('message HTTP', msg.status);
   // Rovo streams JSON events: TRACE (tool progress), ANSWER_PART (text deltas), FINAL_RESPONSE (whole
   // message with every tool invocation, its input and output).
@@ -110,24 +103,9 @@ for (const prompt of prompts) {
       }
     }
   }
-  // Rovo holds consequential actions (UPDATE/CREATE/DELETE verbs) for the user's confirmation click.
-  // ROVO_CONFIRM=1 plays that click for our own test user; try the web client's confirmation shapes.
-  if (planned.length && process.env.ROVO_CONFIRM) {
-    for (const a of planned) {
-      const attempts = [
-        ['POST', `/gateway/api/assist/rovo/v1/chat/conversation/${convoId}/action`, { ...a, status: 'confirmed', context: {} }],
-        ['POST', `/gateway/api/assist/rovo/v1/chat/conversation/${convoId}/action`, {
-          actionId: a.actionId, invocationId: a.invocationId, key: a.key, data: a.data, humanMessageId: a.humanMessageId,
-          context: { cloudId, product: 'jira' },
-        }],
-      ];
-      for (const [method, path, body] of attempts) {
-        const r = await call(method, path, { headers: { ...rovo, Accept: '*/*' }, raw: true, body });
-        console.log('CONFIRM TRY', path.split('/').slice(-2).join('/'), 'HTTP', r.status, clip(r.text.replace(/\s+/g, ' '), 1500));
-        if (r.status === 200) break;
-      }
-    }
-  }
+  // Rovo holds consequential actions (UPDATE/CREATE/DELETE verbs) until the user clicks Confirm in chat.
+  // This script does not play that click; it reports the planned call so a person can confirm it in Rovo.
+  for (const a of planned) console.log('WAITING FOR ROVO CONFIRMATION', a.displayName, JSON.stringify(a.data));
   console.log('<<< AGENT:', clip(finalText || '(no final response)', 4000));
   if (process.env.ROVO_RAW) console.log('RAW HEAD', clip(msg.text, 4000), '\nRAW TAIL', msg.text.slice(-4000));
 }

@@ -1,6 +1,6 @@
 // Forge entry point: platform wiring and the asUser transport.
 // Named imports only: @forge/* packages are CommonJS, so default imports are unreliable under ESM.
-import { asUser, assumeTrustedRoute } from '@forge/api';
+import { asUser, assumeTrustedRoute, getAppContext } from '@forge/api';
 import { kvs, WhereConditions } from '@forge/kvs';
 import { KvsStore } from './store/kvs.js';
 import { Repo } from './store/repo.js';
@@ -9,6 +9,7 @@ import { GateService } from './service.js';
 import { TeamworkGraphClient, cloudIdFrom } from './context/graph-client.js';
 import { makeHandlers } from './actions.js';
 import { buildResolver } from './resolvers.js';
+import { approvalPagePath } from './rovo/links.js';
 
 // asUser(): every Jira call runs with the permissions of the human the agent acts for,
 // so the gate can only ever narrow what that user could already do.
@@ -48,6 +49,8 @@ const service = (context, payload) =>
     repo: new Repo(new KvsStore(kvs, WhereConditions)),
     jira: new JiraClient(requestAsUser),
     graph: new TeamworkGraphClient(graphAsUser, cloudIdFrom(context) ?? cloudIdFrom(payload?.context)),
+    // Link Rovo chat can show for "approve here": this app's own global page in this environment.
+    approvalPage: () => approvalPagePath(getAppContext()),
   });
 
 const h = makeHandlers(service);

@@ -13,9 +13,13 @@ Rules:
   acg-issue-context and summarise the signals in one or two lines.
 - DENIED: tell the user the reasons in plain words. Do not retry with a workaround such
   as splitting a bulk change into many small calls to stay under a limit.
+- Rovo may ask the user to confirm a write before it runs. That confirmation is not the
+  gate's approval: the gate still decides, and may hold or block the change.
 - PENDING_APPROVAL: nothing changed yet. Give the user the approvalId and say a human
-  approver must approve it on the "Agent Change Gate" page in Jira (Apps menu). When the
-  user says it is approved, call acg-approval-status, then acg-run-approved-change.
+  approver must approve it on the Agent Change Gate page in Jira. If the result has
+  approvalPage, give it as a markdown link, e.g. [Agent Change Gate](<approvalPage>);
+  otherwise say "Apps menu > Agent Change Gate". When the user says it is approved, call
+  acg-approval-status and follow its nextStep (run acg-run-approved-change only if APPROVED).
 - REFUSED with BUSY: a gate mutation is in progress. Retry the same call later; do
   not switch tools or create duplicate approval requests. Other REFUSED codes: explain
   the reason and ask whether a new request is needed.

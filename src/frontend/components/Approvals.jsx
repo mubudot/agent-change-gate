@@ -25,6 +25,8 @@ import { changeSummary, formatTime, operationLabel, relativeTime, sourceLabel, t
 import { EmptyNotice, Feedback, Section, StatusLozenge, resultMessage } from './ui.jsx';
 import { Simulator } from './Simulator.jsx';
 import { ContextSignals, SourceLozenge } from './ContextSignals.jsx';
+import { AskAgentButton } from './AskAgent.jsx';
+import { canRunFromChat, runApprovedPrompt } from '../rovo-prompts.js';
 
 const HEAD = {
   cells: [
@@ -98,6 +100,11 @@ function ReviewModal({ request, data, onClose, onDecided }) {
               <Text>Two-person rule: you requested this change, so another approver must decide it.</Text>
             </SectionMessage>
           )}
+          {canRunFromChat(request, data.actor) && (
+            <SectionMessage appearance="success" title="Approved">
+              <Text>Ask the Change Gate Agent to run it once. The gate re-checks policy and context first.</Text>
+            </SectionMessage>
+          )}
           {canDecide && !ownRequest && (
             <TextArea placeholder="Optional note for the audit log" value={note} onChange={(e) => setNote(e.target.value)} />
           )}
@@ -105,6 +112,15 @@ function ReviewModal({ request, data, onClose, onDecided }) {
       </ModalBody>
       <ModalFooter>
         <Button appearance="subtle" isDisabled={busy} onClick={onClose}>Close</Button>
+        {canRunFromChat(request, data.actor) && (
+          <AskAgentButton
+            appearance="primary"
+            prompt={runApprovedPrompt(request.id)}
+            onError={(text) => setMessage({ tone: 'error', text: `Could not open Rovo chat: ${text}` })}
+          >
+            Run it from Rovo chat
+          </AskAgentButton>
+        )}
         {canDecide && (
           <>
             <Button appearance="danger" isDisabled={busy} onClick={() => decide(false)}>Reject</Button>

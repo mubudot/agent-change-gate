@@ -63,7 +63,7 @@ export function fakeJira({ admins = [BOB], issues } = {}) {
   return { state, client: new JiraClient(request) };
 }
 
-export async function setup({ policy = {}, admins, graph = null } = {}) {
+export async function setup({ policy = {}, admins, graph = null, approvalPage } = {}) {
   let t = Date.UTC(2026, 10, 2, 9, 0, 0);
   const store = new MemoryStore(() => t);
   const repo = new Repo(store);
@@ -75,6 +75,7 @@ export async function setup({ policy = {}, admins, graph = null } = {}) {
     graph,
     now: () => t,
     newId: () => `id-${String(++n).padStart(6, '0')}`,
+    ...(approvalPage ? { approvalPage } : {}),
   });
   const saved = await repo.savePolicy({ allowedProjects: ['DEMO'], ...policy });
   if (!saved.ok) throw new Error(saved.errors.join('; '));

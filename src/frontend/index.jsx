@@ -9,6 +9,7 @@ import { Summary } from './components/Summary.jsx';
 import { Approvals } from './components/Approvals.jsx';
 import { AuditLog } from './components/AuditLog.jsx';
 import { PolicyPanel } from './components/PolicyPanel.jsx';
+import { AskAgentButton } from './components/AskAgent.jsx';
 
 function App() {
   const [data, setData] = useState(null);
@@ -58,7 +59,10 @@ function App() {
       <Stack space="space.300">
         <Inline spread="space-between" alignBlock="center" shouldWrap>
           <Text>Before an AI agent writes to Jira, the gate checks what the issue is connected to (releases, blockers, goals, pull requests, deployments) and asks a human when it matters.</Text>
-          <Button appearance="subtle" isDisabled={loading} onClick={load}>{loading ? 'Refreshing…' : 'Refresh'}</Button>
+          <Inline space="space.100" alignBlock="center">
+            <AskAgentButton>Ask Change Gate Agent</AskAgentButton>
+            <Button appearance="subtle" isDisabled={loading} onClick={load}>{loading ? 'Refreshing…' : 'Refresh'}</Button>
+          </Inline>
         </Inline>
         {error && <SectionMessage appearance="warning"><Text>{`Refresh failed, showing earlier data: ${error}`}</Text></SectionMessage>}
         <Summary data={data} pending={pending} />

@@ -15,7 +15,7 @@ Every write tool returns a JSON object with a `status`. Act on it exactly:
 | `EXECUTED` | all targets changed | report the change |
 | `PARTIAL` / `FAILED` | some/all Jira calls failed | list `results[]` entries with `ok: false` and their `error` |
 | `DENIED` | policy forbids it | explain `reasons[].message`; never work around it |
-| `PENDING_APPROVAL` | nothing changed; a human must approve | give the user `approvalId`; later call `acg-approval-status`, then `acg-run-approved-change` |
+| `PENDING_APPROVAL` | nothing changed; a human must approve | give the user `approvalId` and, when present, the `approvalPage` link; later call `acg-approval-status` and follow its `nextStep` |
 | `INVALID` | bad inputs | fix inputs from `errors[]` or ask the user |
 | `PREVIEW` | dry run (`preview: true`) | report the `verdict` and reasons |
 | `REFUSED` | gate or approval refuses the call (`code`) | `BUSY`: retry the same call later; other codes: explain and ask if a new request is needed |
