@@ -98,6 +98,8 @@ for (const prompt of prompts) {
     if (ev.type === 'FINAL_RESPONSE') {
       const m = ev.message?.message ?? ev.message ?? {};
       finalText = typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '');
+      const brief = Object.fromEntries(Object.entries(m).filter(([k, v]) => k !== 'plugin_invocations' && k !== 'content' && v != null && !(Array.isArray(v) && !v.length) && !(typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length)));
+      console.log('FINAL META', clip(JSON.stringify(brief), 3000));
       for (const inv of m.plugin_invocations ?? []) {
         console.log('TOOL', inv.plugin_display_name, '| keys:', Object.keys(inv).join(','));
         for (const k of Object.keys(inv)) if (/input|arg|param/i.test(k)) console.log('  ', k, clip(JSON.stringify(inv[k]), 600));
