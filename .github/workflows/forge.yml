@@ -71,7 +71,7 @@ jobs:
         # Free Forge demo site (Enterprise Jira/Confluence/JSM + Rovo, 90 days). No billing involved.
         run: |
           npm install -g @forge/cli@15 >/dev/null 2>&1
-          timeout 900 script -qefc 'forge site provision' /dev/null || echo "provision exited $?"
+          timeout 900 script -qefc "forge site provision" /dev/null
       - name: install-demo
         if: inputs.action == 'install' && inputs.site == 'demo'
         run: |

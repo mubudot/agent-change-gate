@@ -325,8 +325,9 @@ export class GateService {
       : this.graph ? this.graph.ping() : Promise.resolve({ ok: false, error: 'not configured' });
     const approver = policy.approvers.length ? policy.approvers.includes(actor) : isAdmin;
     const seesAll = approver || isAdmin;
-    const [requests, audit, usage, simulations, graphStatus] = await Promise.all([
+    const [requests, myApproved, audit, usage, simulations, graphStatus] = await Promise.all([
       this.repo.listOpenRequests(50, now, seesAll ? undefined : actor),
+      this.repo.listApprovedFor(actor, 20, now),
       seesAll ? this.repo.listAudit(50) : this.repo.listAuditForActor(actor, 50),
       this.repo.getUsage('-', now, policy.timezone),
       isAdmin ? this.repo.listSimulations(10, now) : [],
@@ -339,6 +340,7 @@ export class GateService {
       policy,
       policyErrors: errors,
       requests,
+      myApproved,
       audit,
       siteUsageToday: usage.siteDay,
       simulations,

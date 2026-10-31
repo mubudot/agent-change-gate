@@ -92,3 +92,42 @@ test('page -> Rovo chat hand-off: agent identity matches the manifest, prompts a
   assert.equal(canRunFromChat({ ...req, source: 'simulated' }, ALICE), false);
   assert.equal(canRunFromChat(req, undefined), false);
 });
+
+test("requester sees their own approved request on the page until it runs (Run it from Rovo chat)", async () => {
+  const { svc, as } = await setup();
+  const p = await svc.guardedChange('jira.issue.delete', { issueKeys: 'DEMO-2' }, ALICE);
+  as(BOB);
+  await svc.decideRequest(p.approvalId, true, 'ok', BOB);
+  as(ALICE);
+  let dash = await svc.dashboard(ALICE);
+  assert.deepEqual(dash.requests.map((r) => r.id), []);
+  assert.deepEqual(dash.myApproved.map((r) => [r.id, r.status]), [[p.approvalId, 'APPROVED']]);
+  assert.equal(canRunFromChat(dash.myApproved[0], ALICE), true);
+  // Nobody else gets it in their list.
+  as(BOB);
+  assert.deepEqual((await svc.dashboard(BOB)).myApproved, []);
+  // Once run, it leaves the list.
+  as(ALICE);
+  assert.equal((await svc.runApproved(p.approvalId, ALICE)).status, 'EXECUTED');
+  dash = await svc.dashboard(ALICE);
+  assert.deepEqual(dash.myApproved, []);
+});
+
+test('an approved request that expires drops off the requester list', async () => {
+  const { svc, as, advance } = await setup();
+  const p = await svc.guardedChange('jira.issue.delete', { issueKeys: 'DEMO-2' }, ALICE);
+  as(BOB);
+  await svc.decideRequest(p.approvalId, true, 'ok', BOB);
+  advance(25 * 60 * 60 * 1000);
+  as(ALICE);
+  assert.deepEqual((await svc.dashboard(ALICE)).myApproved, []);
+});
+
+test('rovo-probe never sends the developer credentials to a non-Atlassian host', async () => {
+  const { spawnSync } = await import('node:child_process');
+  for (const host of ['attacker.example', 'evil.atlassian.net.example.com', 'https://x.atlassian.net@evil.example']) {
+    const r = spawnSync(process.execPath, ['scripts/rovo-probe.mjs', host], { env: { FORGE_EMAIL: 'e', FORGE_API_TOKEN: 't', PATH: process.env.PATH }, encoding: 'utf8', timeout: 10000 });
+    assert.notEqual(r.status, 0);
+    assert.match(r.stderr, /refusing to send credentials/);
+  }
+});

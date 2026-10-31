@@ -149,10 +149,13 @@ function WhyCell({ reasons }) {
 export function Approvals({ data, loading, reload }) {
   const [reviewing, setReviewing] = useState(null);
   const [message, setMessage] = useState(null);
-  const request = data.requests.find((r) => r.id === reviewing);
+  // Pending requests, plus the viewer's own approved ones (run them once from Rovo chat).
+  const pendingIds = new Set(data.requests.map((r) => r.id));
+  const listed = [...data.requests, ...(data.myApproved ?? []).filter((r) => !pendingIds.has(r.id))];
+  const request = listed.find((r) => r.id === reviewing);
   const now = Date.now();
 
-  const rows = data.requests.map((r) => ({
+  const rows = listed.map((r) => ({
     key: r.id,
     cells: [
       { key: 'requested', content: <Stack space="space.0"><Text>{formatTime(r.createdAt)}</Text><Text size="small" color="color.text.subtlest">{relativeTime(r.createdAt, now)}</Text></Stack> },

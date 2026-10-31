@@ -122,7 +122,23 @@ export class Repo {
     if (req.source === 'simulated') {
       if (req.status === Status.APPROVED) await this.store.set(`simok:${req.id}`, req.id, { ttlSeconds: 8 * 86400 });
       else await this.store.delete(`simok:${req.id}`);
+    } else {
+      // Approved agent requests stay visible to their requester (page -> "Run it from Rovo chat") until run.
+      // TTL outlives the longest approval TTL (7 days); expiry itself is decided by withExpiry, not by the TTL.
+      const key = `okreq:${actorKey(req.requester)}:${req.id}`;
+      if (req.status === Status.APPROVED) await this.store.set(key, req.id, { ttlSeconds: 8 * 86400 });
+      else await this.store.delete(key);
     }
+  }
+
+  /** The actor's own approved, unexpired, not-yet-run agent requests (newest first). */
+  async listApprovedFor(actor, limit = 20, now = Date.now()) {
+    if (!actor) return [];
+    const entries = await this.store.list(`okreq:${actorKey(actor)}:`, limit);
+    const reqs = await Promise.all(entries.map((e) => this.getRequest(e.value)));
+    return reqs
+      .filter((r) => r && r.requester === actor && withExpiry(r, now).status === Status.APPROVED)
+      .sort((a, b) => b.createdAt - a.createdAt);
   }
 
   async findPending(actor, fingerprint, now, origin) {

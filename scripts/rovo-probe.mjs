@@ -9,9 +9,18 @@
 //   node scripts/rovo-probe.mjs <site-host> peek ["JQL"]   lists projects and issues to pick test data.
 const [site, ...prompts] = process.argv.slice(2);
 if (!site) throw new Error('usage: rovo-probe.mjs <site-host> [prompt...]');
+// The developer's credentials go only to an Atlassian Cloud site host.
+const host = site.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase();
+if (!/^[a-z0-9][a-z0-9-]{0,62}\.atlassian\.net$/.test(host)) throw new Error(`refusing to send credentials to "${host}": expected <site>.atlassian.net`);
 const auth = 'Basic ' + Buffer.from(`${process.env.FORGE_EMAIL}:${process.env.FORGE_API_TOKEN}`).toString('base64');
-const base = `https://${site.replace(/^https?:\/\//, '').replace(/\/$/, '')}`;
+const base = `https://${host}`;
 const AGENT_NAME = 'Change Gate Agent';
+// Our app and environment (default: development). The agent must come from exactly this deployment.
+const APP_ID = '67a2afa4-d23d-4d5b-a9b7-1cf01c63defe';
+const ENV_ID = process.env.ACG_ENV_ID ?? 'fb72e4c2-07b3-4fdf-9ba0-876c0e692990';
+const EXPECTED_ACTIONS = ['acg-approval-status', 'acg-assign-issues', 'acg-comment-issues', 'acg-create-issue', 'acg-delete-issues',
+  'acg-edit-issues', 'acg-issue-context', 'acg-my-activity', 'acg-policy-summary', 'acg-run-approved-change', 'acg-transition-issues'];
+const fail = (code, why) => { console.log('FAIL', why); process.exit(code); };
 
 const clip = (s, n = 1500) => (s.length > n ? s.slice(0, n) + ` …[${s.length - n} more]` : s);
 
@@ -50,24 +59,31 @@ const rovo = { 'x-cloudid': cloudId, 'x-experience-id': 'ai-mate', 'x-product': 
 
 // The agents list is paged; follow the cursor until our agent shows up.
 let ours;
+const matches = [];
 let seen = 0;
 let cursor = '';
-for (let page = 0; page < 20 && !ours; page++) {
+for (let page = 0; page < 20; page++) {
   const agents = await call('GET', `/gateway/api/assist/rovo/v1/agents?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, { headers: rovo });
   const list = agents.json?.items ?? agents.json?.values ?? [];
   if (page === 0) console.log('agents HTTP', agents.status, '| page keys:', Object.keys(agents.json ?? {}).join(','));
   seen += list.length;
-  ours = list.find((a) => a?.name === AGENT_NAME);
+  // Same display name is not enough: a custom agent or another deployment could share it.
+  matches.push(...list.filter((a) => a?.name === AGENT_NAME && a?.creator_type === 'FORGE' && JSON.stringify(a).includes(`${APP_ID}/${ENV_ID}`)));
   cursor = agents.json?.next_cursor ?? agents.json?.cursor ?? agents.json?.next ?? '';
   if (!cursor || !list.length) break;
 }
+if (matches.length > 1) fail(2, `${matches.length} agents match ${AGENT_NAME} in this deployment`);
+ours = matches[0];
+const missing = ours ? EXPECTED_ACTIONS.filter((k) => !(k in (ours.available_plugins ?? {}))) : [];
+if (missing.length) fail(2, `agent is missing actions: ${missing.join(', ')}`);
 console.log('agents seen', seen, '| ours:', ours ? JSON.stringify({ id: ours.id, named_id: ours.named_id, creator_type: ours.creator_type, plugins: Object.keys(ours.available_plugins ?? {}), model: ours.execution_config?.model_display_name }) : 'NOT FOUND');
-if (!ours || !prompts.length) process.exit(ours ? 0 : 2);
+if (!ours) fail(2, `${AGENT_NAME} from app ${APP_ID} env ${ENV_ID} not found`);
+if (!prompts.length) process.exit(0);
 
 const convo = await call('POST', '/gateway/api/assist/rovo/v1/chat/conversation', { headers: rovo, body: {} });
 console.log('conversation HTTP', convo.status, clip(convo.text, 400));
 const convoId = convo.json?.id ?? convo.json?.conversation_id;
-if (!convoId) process.exit(3);
+if (!convoId) fail(3, 'could not create a conversation');
 
 for (const prompt of prompts) {
   console.log('\n>>> USER:', prompt);
@@ -79,6 +95,7 @@ for (const prompt of prompts) {
     body: { recipient_agent_named_id: ours.named_id, agent_id: ours.id, content: adf, mimeType: 'text/adf', context: {} },
   });
   console.log('message HTTP', msg.status);
+  if (msg.status !== 200) fail(4, `message HTTP ${msg.status}: ${clip(msg.text, 500)}`);
   // Rovo streams JSON events: TRACE (tool progress), ANSWER_PART (text deltas), FINAL_RESPONSE (whole
   // message with every tool invocation, its input and output).
   const events = msg.text.split('\n').map((l) => (l.startsWith('data:') ? l.slice(5) : l)).filter((l) => l.trim().startsWith('{'))
@@ -107,5 +124,7 @@ for (const prompt of prompts) {
   // This script does not play that click; it reports the planned call so a person can confirm it in Rovo.
   for (const a of planned) console.log('WAITING FOR ROVO CONFIRMATION', a.displayName, JSON.stringify(a.data));
   console.log('<<< AGENT:', clip(finalText || '(no final response)', 4000));
+  if (!events.some((e) => e.type === 'FINAL_RESPONSE')) fail(5, 'stream ended without a final response');
+  if (!finalText && !planned.length) fail(5, 'final response has neither text nor a planned action');
   if (process.env.ROVO_RAW) console.log('RAW HEAD', clip(msg.text, 4000), '\nRAW TAIL', msg.text.slice(-4000));
 }
