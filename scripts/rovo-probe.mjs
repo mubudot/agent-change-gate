@@ -86,18 +86,24 @@ for (const prompt of prompts) {
     console.log('shape rejected', shape.accept, typeof shape.body.content, 'HTTP', msg.status, clip(msg.text, 600));
   }
   console.log('message HTTP', msg.status);
-  // Print the final answer text and any action/tool events; keep the raw tail for debugging.
-  const lines = msg.text.split('\n').map((l) => (l.startsWith('data:') ? l.slice(5) : l)).filter((l) => l.trim().startsWith('{'));
+  // Rovo streams JSON events: TRACE (tool progress), ANSWER_PART (text deltas), FINAL_RESPONSE (whole
+  // message with every tool invocation, its input and output).
+  const events = msg.text.split('\n').map((l) => (l.startsWith('data:') ? l.slice(5) : l)).filter((l) => l.trim().startsWith('{'))
+    .map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
   let finalText = '';
-  for (const l of lines) {
-    let ev;
-    try { ev = JSON.parse(l); } catch { continue; }
-    const m = ev?.message ?? ev;
-    const t = typeof m?.content === 'string' ? m.content : '';
-    if (t) finalText = t;
-    const acts = m?.action_invocations ?? m?.actions ?? m?.plugin_invocations;
-    if (acts) console.log('ACTION EVENT', clip(JSON.stringify(acts), 1200));
+  for (const ev of events) {
+    if (ev.type === 'TRACE' && /Invoking tool/.test(ev.message?.content ?? '')) console.log('TRACE', ev.message.content);
+    if (ev.type === 'FINAL_RESPONSE') {
+      const m = ev.message?.message ?? ev.message ?? {};
+      finalText = typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '');
+      for (const inv of m.plugin_invocations ?? []) {
+        console.log('TOOL', inv.plugin_display_name, '| keys:', Object.keys(inv).join(','));
+        for (const k of Object.keys(inv)) if (/input|arg|param/i.test(k)) console.log('  ', k, clip(JSON.stringify(inv[k]), 600));
+        for (const k of Object.keys(inv)) if (/output|result|response/i.test(k)) console.log('  ', k, clip(typeof inv[k] === 'string' ? inv[k] : JSON.stringify(inv[k]), 1500));
+        if (inv.plugin_error_message) console.log('   error', inv.plugin_error_message);
+      }
+    }
   }
-  console.log('<<< AGENT:', clip(finalText || '(no text parsed)', 3000));
+  console.log('<<< AGENT:', clip(finalText || '(no final response)', 4000));
   if (process.env.ROVO_RAW || !finalText) console.log('RAW HEAD', clip(msg.text, 4000), '\nRAW TAIL', msg.text.slice(-4000));
 }
