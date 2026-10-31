@@ -91,12 +91,14 @@ for (const prompt of prompts) {
   const events = msg.text.split('\n').map((l) => (l.startsWith('data:') ? l.slice(5) : l)).filter((l) => l.trim().startsWith('{'))
     .map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
   let finalText = '';
+  let planned = [];
   console.log('EVENTS', events.map((e) => e.type).join(' '));
   for (const ev of events) {
     if (!['TRACE', 'ANSWER_PART', 'FINAL_RESPONSE', 'RECONNECT_SUPPORTED', 'CONVERSATION_CHANNEL_DATA', 'FOLLOW_UP_QUERIES'].includes(ev.type)) console.log('EV', ev.type, clip(JSON.stringify(ev), 2500));
     if (ev.type === 'TRACE' && /Invoking tool/.test(ev.message?.content ?? '')) console.log('TRACE', ev.message.content);
     if (ev.type === 'FINAL_RESPONSE') {
       const m = ev.message?.message ?? ev.message ?? {};
+      planned = (m.actions ?? []).filter((a) => a.status === 'planned');
       finalText = typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '');
       const brief = Object.fromEntries(Object.entries(m).filter(([k, v]) => k !== 'plugin_invocations' && k !== 'content' && v != null && !(Array.isArray(v) && !v.length) && !(typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length)));
       console.log('FINAL META', clip(JSON.stringify(brief), 3000));
@@ -105,6 +107,25 @@ for (const prompt of prompts) {
         for (const k of Object.keys(inv)) if (/input|arg|param/i.test(k)) console.log('  ', k, clip(JSON.stringify(inv[k]), 600));
         for (const k of Object.keys(inv)) if (/output|result|response/i.test(k)) console.log('  ', k, clip(typeof inv[k] === 'string' ? inv[k] : JSON.stringify(inv[k]), 1500));
         if (inv.plugin_error_message) console.log('   error', inv.plugin_error_message);
+      }
+    }
+  }
+  // Rovo holds consequential actions (UPDATE/CREATE/DELETE verbs) for the user's confirmation click.
+  // ROVO_CONFIRM=1 plays that click for our own test user; try the web client's confirmation shapes.
+  if (planned.length && process.env.ROVO_CONFIRM) {
+    for (const a of planned) {
+      const attempts = [
+        ['POST', `/gateway/api/assist/rovo/v1/chat/conversation/${convoId}/action`, { ...a, status: 'confirmed' }],
+        ['POST', `/gateway/api/assist/rovo/v1/chat/conversation/${convoId}/action/stream`, { ...a, status: 'confirmed' }],
+        ['POST', `/gateway/api/assist/rovo/v1/chat/conversation/${convoId}/message/stream`, {
+          recipient_agent_named_id: ours.named_id, content: '', mimeType: 'text/markdown', context: {},
+          action_resumption: { invocationId: a.invocationId, actionId: a.actionId, key: a.key, data: a.data, status: 'confirmed', humanMessageId: a.humanMessageId },
+        }],
+      ];
+      for (const [method, path, body] of attempts) {
+        const r = await call(method, path, { headers: { ...rovo, Accept: '*/*' }, raw: true, body });
+        console.log('CONFIRM TRY', path.split('/').slice(-2).join('/'), 'HTTP', r.status, clip(r.text.replace(/\s+/g, ' '), 1500));
+        if (r.status === 200) break;
       }
     }
   }

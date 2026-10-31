@@ -93,7 +93,7 @@ jobs:
         run: |
           test -n "$SITE" || { echo "site input required"; exit 1; }
           IFS=$'\n' read -r -d '' -a P < <(printf '%s' "$PROMPTS" | sed 's/||/\n/g'; printf '\0') || true
-          node scripts/rovo-probe.mjs "$SITE" "${P[@]}"
+          ROVO_CONFIRM=1 node scripts/rovo-probe.mjs "$SITE" "${P[@]}"
       - name: ui-invoke
         if: inputs.action == 'ui-invoke'
         env:
