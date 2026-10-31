@@ -6,9 +6,9 @@ on:
         description: Forge action
         required: true
         type: choice
-        options: [whoami, register, deploy, install, logs]
+        options: [whoami, register, deploy, install, logs, site-provision]
       site:
-        description: Atlassian site for install (e.g. example.atlassian.net)
+        description: Atlassian site for install (e.g. example.atlassian.net), or "demo" for the Forge demo site
         required: false
         type: string
       environment:
@@ -62,8 +62,19 @@ jobs:
           npx --yes @forge/cli@15 lint || echo "lint reported issues (see above)"
           # A scope change is a major version; acknowledging it is required to deploy.
           npx --yes @forge/cli@15 deploy -e "$FORGE_ENV" --non-interactive --approve MAJOR_VERSION_RULE
+      - name: site-provision
+        if: inputs.action == 'site-provision'
+        # Free Forge demo site (Enterprise Jira/Confluence/JSM + Rovo, 90 days). No billing involved.
+        run: |
+          npm install -g @forge/cli@15 >/dev/null 2>&1
+          timeout 900 script -qefc 'forge site provision' /dev/null || echo "provision exited $?"
+      - name: install-demo
+        if: inputs.action == 'install' && inputs.site == 'demo'
+        run: |
+          npx --yes @forge/cli@15 install --demo-site --product jira -e "$FORGE_ENV" --non-interactive --confirm-scopes \
+            || npx --yes @forge/cli@15 install --demo-site --product jira -e "$FORGE_ENV" --non-interactive --upgrade --confirm-scopes
       - name: install
-        if: inputs.action == 'install'
+        if: inputs.action == 'install' && inputs.site != 'demo'
         env:
           SITE: ${{ inputs.site }}
         run: |
