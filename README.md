@@ -16,8 +16,10 @@ The gate covers this app's tools; it cannot constrain other Jira tools or direct
 and to a development environment installed on a free Jira Cloud test site. On that live site the approval page, policy
 editor, audit log, kill switch and the *Simulate an agent request* panel were exercised against real issues, including
 the "same command, different context" pair in the demo video (`SHIP-1` allowed and written, `SHIP-2` held for approval
-because its fix version ships within the week). The Rovo agent and MCP server are deployed with the app, but they have
-**not** been run from a Rovo chat or an external MCP client: see [Rovo integration](#rovo-integration-and-what-was-verified).
+because its fix version ships within the week). The Rovo agent was run in a **real Rovo conversation** on a Forge demo
+site (Rovo's model picked the app's tools, which read live Jira and Teamwork Graph context; see
+[`docs/ROVO_CHAT_RUN.md`](docs/ROVO_CHAT_RUN.md)). The MCP server has not been run from an external MCP client: see
+[Rovo integration](#rovo-integration-and-what-was-verified).
 See `STATUS.md` for the review and the verification checklist.
 
 **Demo video (2:33):** VIDEO_URL_PLACEHOLDER (YouTube; link added when the video is published)
@@ -161,11 +163,21 @@ How the app plugs into Rovo (all declared in `manifest.yml`, deployed with the a
 - **`rovo:skill`** packages the same tools for other Rovo agents, and **`rovo:mcp`** exposes them to external MCP
   clients through Atlassian's remote MCP endpoint.
 
+- **Page ↔ chat hand-off:** when Rovo is enabled, the approval page shows **Ask Change Gate Agent**, and a requester
+  looking at their approved request gets **Run it from Rovo chat** (Forge bridge `rovo.open`, pre-filled prompt).
+  In the other direction, `PENDING_APPROVAL` and `approval-status` results carry `approvalPage` (a link to this app's
+  Jira page, built from the Forge app context) and `approval-status` adds a plain-language `nextStep`.
+- Rovo asks the user to **Confirm** write actions before they run (UPDATE/CREATE/DELETE verbs). That is Rovo's
+  check, not the gate's approval: the gate still decides after Confirm.
+
 What was verified: the actions' code paths are covered by the unit/flow tests, the manifest passes `forge lint`, and
-the modules deploy. What was **not** verified: a conversation in Rovo chat. Rovo chat was not available on our free
-developer site (the site's `/chat` page returns Jira's "dead link" page), so the demo video uses the admin simulator,
-which sends the exact action input an agent would send through the same gate. We make no claim of a recorded Rovo
-conversation; on a site with Rovo chat, follow **With Rovo** above.
+the modules deploy. **Rovo chat (2026-10-31):** on a Forge demo site (`forge site provision`, Enterprise + Rovo) the
+agent is registered with all 11 actions; in a real Rovo conversation it called *Show agent change policy* and *Check
+issue context* (live result: `MOBL-12 blocks 5 open issues`, sources Jira + Teamwork Graph) and planned *Guarded -
+transition issues* with the right input, which Rovo held for the user's Confirm click. Transcript and limits:
+[`docs/ROVO_CHAT_RUN.md`](docs/ROVO_CHAT_RUN.md). Not verified from chat: the Confirm click itself and the
+approve-in-page → run-from-chat round trip (both need a person in the browser), and an external MCP client. Rovo chat
+is not available on free developer sites; use a Forge demo site (`forge site provision`) to try it.
 
 ## Default policy
 
@@ -185,6 +197,6 @@ See `STATUS.md` for the operational limits of this approach.
 Forge (UI Kit, KVS, Rovo modules), Jira REST v3, Node.js `node:test`. Libraries: `@forge/api`, `@forge/bridge`,
 `@forge/kvs`, `@forge/react`, `@forge/resolver`, `react` 18. Developed with AI coding assistance;
 local unit and flow tests cover the gate and adapters; the Forge runtime (UI, resolvers, Jira and Teamwork Graph
-reads) was exercised on the live development site, the Rovo chat path was not (see above).
+reads) was exercised on the live development site, and the Rovo agent in a Rovo conversation on a demo site (see above).
 
 MIT licence.
