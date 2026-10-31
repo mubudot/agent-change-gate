@@ -91,7 +91,9 @@ for (const prompt of prompts) {
   const events = msg.text.split('\n').map((l) => (l.startsWith('data:') ? l.slice(5) : l)).filter((l) => l.trim().startsWith('{'))
     .map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
   let finalText = '';
+  console.log('EVENTS', events.map((e) => e.type).join(' '));
   for (const ev of events) {
+    if (!['TRACE', 'ANSWER_PART', 'FINAL_RESPONSE', 'RECONNECT_SUPPORTED', 'CONVERSATION_CHANNEL_DATA', 'FOLLOW_UP_QUERIES'].includes(ev.type)) console.log('EV', ev.type, clip(JSON.stringify(ev), 2500));
     if (ev.type === 'TRACE' && /Invoking tool/.test(ev.message?.content ?? '')) console.log('TRACE', ev.message.content);
     if (ev.type === 'FINAL_RESPONSE') {
       const m = ev.message?.message ?? ev.message ?? {};
@@ -105,5 +107,5 @@ for (const prompt of prompts) {
     }
   }
   console.log('<<< AGENT:', clip(finalText || '(no final response)', 4000));
-  if (process.env.ROVO_RAW || !finalText) console.log('RAW HEAD', clip(msg.text, 4000), '\nRAW TAIL', msg.text.slice(-4000));
+  if (process.env.ROVO_RAW) console.log('RAW HEAD', clip(msg.text, 4000), '\nRAW TAIL', msg.text.slice(-4000));
 }
