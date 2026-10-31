@@ -115,11 +115,10 @@ for (const prompt of prompts) {
   if (planned.length && process.env.ROVO_CONFIRM) {
     for (const a of planned) {
       const attempts = [
-        ['POST', `/gateway/api/assist/rovo/v1/chat/conversation/${convoId}/action`, { ...a, status: 'confirmed' }],
-        ['POST', `/gateway/api/assist/rovo/v1/chat/conversation/${convoId}/action/stream`, { ...a, status: 'confirmed' }],
-        ['POST', `/gateway/api/assist/rovo/v1/chat/conversation/${convoId}/message/stream`, {
-          recipient_agent_named_id: ours.named_id, content: '', mimeType: 'text/markdown', context: {},
-          action_resumption: { invocationId: a.invocationId, actionId: a.actionId, key: a.key, data: a.data, status: 'confirmed', humanMessageId: a.humanMessageId },
+        ['POST', `/gateway/api/assist/rovo/v1/chat/conversation/${convoId}/action`, { ...a, status: 'confirmed', context: {} }],
+        ['POST', `/gateway/api/assist/rovo/v1/chat/conversation/${convoId}/action`, {
+          actionId: a.actionId, invocationId: a.invocationId, key: a.key, data: a.data, humanMessageId: a.humanMessageId,
+          context: { cloudId, product: 'jira' },
         }],
       ];
       for (const [method, path, body] of attempts) {
