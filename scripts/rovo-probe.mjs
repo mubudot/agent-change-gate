@@ -78,6 +78,10 @@ const missing = ours ? EXPECTED_ACTIONS.filter((k) => !(k in (ours.available_plu
 if (missing.length) fail(2, `agent is missing actions: ${missing.join(', ')}`);
 console.log('agents seen', seen, '| ours:', ours ? JSON.stringify({ id: ours.id, named_id: ours.named_id, creator_type: ours.creator_type, plugins: Object.keys(ours.available_plugins ?? {}), model: ours.execution_config?.model_display_name }) : 'NOT FOUND');
 if (!ours) fail(2, `${AGENT_NAME} from app ${APP_ID} env ${ENV_ID} not found`);
+if (process.env.ROVO_AGENT_DUMP) {
+  const { system_prompt_template, description, user_defined_conversation_starters, ...rest } = ours;
+  console.log('AGENT FIELDS', clip(JSON.stringify(rest), 3000));
+}
 if (!prompts.length) process.exit(0);
 
 const convo = await call('POST', '/gateway/api/assist/rovo/v1/chat/conversation', { headers: rovo, body: {} });
