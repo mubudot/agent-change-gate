@@ -12,18 +12,17 @@ and human approval (two-person rule, single-use, expiring) for bulk or destructi
 Dispatches have an audit intent recorded before Jira is called, followed by their outcome.
 The gate covers this app's tools; it cannot constrain other Jira tools or direct REST calls.
 
-**Status:** deployed to the Forge **production** environment (v2.1.0, the version the install link below installs)
+**Status:** deployed to the Forge **production** environment (v2.2.0, 2026-11-01, the version the install link below installs; includes the Guided demo and the Rovo hand-off buttons)
 and to a development environment installed on a free Jira Cloud test site. On that live site the approval page, policy
 editor, audit log, kill switch and the *Simulate an agent request* panel were exercised against real issues, including
-the "same command, different context" pair in the demo video (`SHIP-1` allowed and written, `SHIP-2` held for approval
-because its fix version ships within the week). The Rovo agent was run in a **real Rovo conversation** on a Forge demo
-site (Rovo's model picked the app's tools, which read live Jira and Teamwork Graph context; see
-[`docs/ROVO_CHAT_RUN.md`](docs/ROVO_CHAT_RUN.md)). The MCP server has not been run from an external MCP client: see
-[Rovo integration](#rovo-integration-and-what-was-verified). Production v2.1.0 was built before the **Guided demo**
-and the Rovo hand-off buttons (*Ask Change Gate Agent*, *Run it from Rovo chat*); those are in the development build
-until production is redeployed. See `STATUS.md` for the review and the verification checklist.
+the "same command, different context" pair (`SHIP-1` allowed and written, `SHIP-2` held for approval
+because its fix version ships within the week). The full **Rovo loop** was run through the real browser UI on a Forge demo
+site with Rovo (2026-11-01): ask → Rovo's Confirm → `PENDING_APPROVAL` → approve on the app page → *Run it from Rovo
+chat* → executed once (the issue moved in Jira) → a second run refused. See
+[`docs/ROVO_CHAT_RUN.md`](docs/ROVO_CHAT_RUN.md). The MCP server has not been run from an external MCP client: see
+[Rovo integration](#rovo-integration-and-what-was-verified). See `STATUS.md` for the review and the verification checklist.
 
-**Demo video (2:33):** VIDEO_URL_PLACEHOLDER (YouTube; link added when the video is published)
+**Demo video (2:44):** VIDEO_URL_PLACEHOLDER (YouTube; link added when the video is published)
 
 **Install for judges:** [install Agent Change Gate on your Jira Cloud site](https://developer.atlassian.com/console/install/67a2afa4-d23d-4d5b-a9b7-1cf01c63defe?signature=AYABeMOYy2xGI9qOFPG1%2BVhSM6gAAAADAAdhd3Mta21zAEthcm46YXdzOmttczp1cy13ZXN0LTI6NzA5NTg3ODM1MjQzOmtleS83MDVlZDY3MC1mNTdjLTQxYjUtOWY5Yi1lM2YyZGNjMTQ2ZTcAuAECAQB4CxqLTo9l4lqXuFjNim1xJM%2Bp%2F3TVP9xHS2BrU5DRRucBFvKkfMY5YAWNYqJd8hgr6QAAAH4wfAYJKoZIhvcNAQcGoG8wbQIBADBoBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDJI50drpOZ9v9bcP7wIBEIA7NxXzVOZtJ97Xc86ozCnJZ0jhht3hQ6ltI205vzvhH3xgC2m%2FWatp1YrohFSMezy32gCyGAZq7WtgFtQAB2F3cy1rbXMAS2Fybjphd3M6a21zOmV1LXdlc3QtMTo3MDk1ODc4MzUyNDM6a2V5LzQ2MzBjZTZiLTAwYzMtNGRlMi04NzdiLTYyN2UyMDYwZTVjYwC4AQICAHi9bVMAkme4qVQX1fQHo6ePw3H40A7cGfz7yrmSfBWMXgGditovz04wvrAW6eo87HjoAAAAfjB8BgkqhkiG9w0BBwagbzBtAgEAMGgGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMpe9xflk2THfCH94aAgEQgDul26V%2BCSFHrVjcEaGfp9%2BlM5pkgYpAOtUTwYzE2nkjPhyQY9c7LTJSHD8U6%2FtohB5cQCecWp%2FIGrDkDgAHYXdzLWttcwBLYXJuOmF3czprbXM6dXMtZWFzdC0xOjcwOTU4NzgzNTI0MzprZXkvNmMxMjBiYTAtNGNkNS00OTg1LWI4MmUtNDBhMDQ5NTJjYzU3ALgBAgIAeDYASx0XCjkny4iLV6vz%2BKtEGSGT6kdt0QRpkn6D%2FlVEARLKhYeL0kJmRgzJY9zYmwMAAAB%2BMHwGCSqGSIb3DQEHBqBvMG0CAQAwaAYJKoZIhvcNAQcBMB4GCWCGSAFlAwQBLjARBAwq9n58xSBUNDYXIz8CARCAOx4DWJO0gIHc87DK6ykxOVmRLdEcOlJWUTrJAlBSd3Xq0kQOMqbAuCNbzfBK2Qu%2B8vaZLrmd0CUpbHRYAgAAAAAMAAAQAAAAAAAAAAAAAAAAADSCxVSkn2dDvIV2dK36H7L%2F%2F%2F%2F%2FAAAAAQAAAAAAAAAAAAAAAQAAADIPweEaJXk%2B4Sjej3OdKV3kB8%2FPFWQ0r8QJC7tP1V8EBfCvTdpG67tAk58h6kHGoi6W9DcXXkDuVbvc7sE3SjvwiNI%3D&product=jira)
 (Forge distribution link, production environment; an org admin must accept the scopes because Teamwork Graph scopes
@@ -51,8 +50,7 @@ Open Jira → Apps → **Agent Change Gate** as a Jira admin (site admins usuall
    audit log are not touched, and the two-person rule is off only inside the demo. *Reset demo* starts over; a demo
    session ends after 24 hours and its data is then cleaned up.
 
-   **No Guided demo card?** The production build behind the install link may predate it (see Status). Same result
-   with the simulator, still without touching any issue: Policy tab → set `"allowedProjects": ["DEMO"]` and
+   **Prefer the simulator?** Same result, still without touching any issue: Policy tab → set `"allowedProjects": ["DEMO"]` and
    `"requireDistinctApprover": false` → **Save policy**. Approvals tab → *Simulate an agent request*, leave *Issue key*
    empty → **Move to In Progress** (ALLOW) → **Same move, issue ships this week** (NEEDS APPROVAL) → **Runaway bulk
    close** (DENY). Approve the pending request in the approvals table, then **Run approved change** in the simulator's
@@ -60,7 +58,7 @@ Open Jira → Apps → **Agent Change Gate** as a Jira admin (site admins usuall
    count toward the caps.
 2. **On your own issues.** Policy tab → add your project key to `allowedProjects` → **Save policy**. Testing alone?
    Also set `"requireDistinctApprover": false` (set it back afterwards). Then Approvals tab → **Test a request** opens
-   *Simulate an agent request*; enter an issue key; [Testing with and without Rovo](#testing-with-and-without-rovo) shows how to reproduce the video's
+   *Simulate an agent request*; enter an issue key; [Testing with and without Rovo](#testing-with-and-without-rovo) shows how to reproduce the
    release-context pair on your own site.
 3. **With Rovo** (Rovo-enabled sites only): Rovo chat → **Change Gate Agent** → *"What could go wrong if you move
    KAN-2?"*, *"Move KAN-1 to In Progress"*, *"Close these 25 issues"*.
@@ -181,9 +179,11 @@ What was verified: the actions' code paths are covered by the unit/flow tests, t
 the modules deploy. **Rovo chat (2026-10-31):** on a Forge demo site (`forge site provision`, Enterprise + Rovo) the
 agent is registered with all 11 actions; in a real Rovo conversation it called *Show agent change policy* and *Check
 issue context* (live result: `MOBL-12 blocks 5 open issues`, sources Jira + Teamwork Graph) and planned *Guarded -
-transition issues* with the right input, which Rovo held for the user's Confirm click. Transcript and limits:
-[`docs/ROVO_CHAT_RUN.md`](docs/ROVO_CHAT_RUN.md). Not verified from chat: the Confirm click itself and the
-approve-in-page → run-from-chat round trip (both need a person in the browser), and an external MCP client. Rovo chat
+transition issues* with the right input, which Rovo held for the user's Confirm click. **2026-11-01:** the whole
+loop was then run in the browser: Confirm → `PENDING_APPROVAL` (protected status + `MOBL-12 blocks 5 open issues`) →
+approved on the app page → *Run it from Rovo chat* → `acg-run-approved-change` executed once and `MOBL-12` moved to
+Done → asking again was refused (`EXECUTED`, single use). Transcript and limits:
+[`docs/ROVO_CHAT_RUN.md`](docs/ROVO_CHAT_RUN.md). Not verified: an external MCP client. Rovo chat
 is not available on free developer sites; use a Forge demo site (`forge site provision`) to try it.
 
 ## Default policy

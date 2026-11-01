@@ -1,18 +1,23 @@
 # Status
 
-Deployed to Forge **production** (v2.1.0, 2026-10-31, the version the judge install link installs) and to the
+Deployed to Forge **production** (v2.2.0, 2026-11-01, code c39afe0, the version the judge install link installs) and to the
 development environment, which is installed on a free Jira Cloud test site. The global page (approvals, policy,
 audit log, kill switch, simulation panel) and the context-aware gate (Jira release facts, Teamwork Graph reads) were
-exercised there with live issues. Not submitted to Devpost or the Marketplace. The Rovo agent was run in a real Rovo
-conversation on a Forge demo site (development environment, see `docs/ROVO_CHAT_RUN.md`); the Rovo Confirm click, the
-approve-in-page → run-from-chat round trip and an external MCP client are not verified. Production is still v2.1.0:
-the Rovo hand-off changes of 2026-10-31 and the Guided demo of 2026-11-01 are in development only.
+exercised there with live issues. Not submitted to Devpost or the Marketplace. The full Rovo loop (Confirm →
+pending → approve on the page → run from chat → second run refused) was run in the browser on a Forge demo site
+(development environment, 2026-11-01, see `docs/ROVO_CHAT_RUN.md`); an external MCP client is not verified.
+
+**2026-11-01 (browser check + production):** Approvals page, Guided demo (all five steps + replay refusal), approval
+queue and *Test a request* checked rendered in Chrome on the development build. Fixes: toggle labels ("Hide guided
+demo", "Hide request simulator", e2bbaa4) and the review modal now closes once *Run it from Rovo chat* opens Rovo
+(c39afe0). Production deployed (GitHub Actions run 41307037193, v2.2.0, same scopes); development redeployed (run
+41307310634).
 
 **2026-11-01 (judge onboarding):** admin-only **Guided demo** on the Approvals tab (five steps on sample issues, per-user
 storage namespace, no Jira writes, no setup) and a "New here?" banner on a fresh install; live comparison presets pick
 the issue's In Progress (or in-progress-category) transition instead of assuming the status name; dashboard labels
 "Attempted targets today (site)" and "Teamwork Graph API reachable"; demo progress self-heals from the stored approval if a save is lost, and a failed load offers "Try again". Once projects are allowed, the approval queue comes first and the demo tools open from *Try guided demo* / *Test a request*. Tests 161 → 201. Deployed to development
-(latest: e884a89, GitHub Actions deploy run 41294078512, success). Not yet seen rendered in a browser.
+(e884a89, GitHub Actions deploy run 41294078512, success); seen rendered in a browser on 2026-11-01 (see above).
 
 ## Review (2026-10-30)
 
@@ -28,8 +33,8 @@ the issue's In Progress (or in-progress-category) transition instead of assuming
 | P2 | Pending deduplication depended on the first 100 eventually consistent query results; expired/other users' entries could hide active requests. | Strong point index for deduplication; queue scans cursor pages and filters expiry/visibility before applying its display limit. |
 | P3 | Documentation overstated audit/cap guarantees and deletion always queuing; one scope was unused. | README, DESIGN, prompt and skill now describe dispatch intent, attempted-target counting, fixed buckets, scope of enforcement and refusal codes. Removed `read:jira-user`; documented mypermissions classic scope is `read:jira-work`. |
 
-Local checks: **161 tests passing** (as of 2026-10-31, after the Rovo hand-off review rounds) with `node --test test/*.test.js` on Node 22.23.3;
-`FORGE_CLI_DIR=../work/forge-cli node scripts/validate-manifest.cjs` passes against the bundled CLI schema.
+Local checks: **201 tests passing** (as of 2026-11-01) with `node --test test/*.test.js` on Node 22.23.3;
+`FORGE_CLI_DIR=<forge-cli dir> node scripts/validate-manifest.cjs` passes against the bundled CLI schema.
 Unit tests exercise pure policy, approval flows, deterministic races, storage failures, Jira routing and SDK-adapter contracts.
 They do not execute the Forge runtime or mount UI Kit; the Forge runtime was exercised separately by the development deploys (see Live site notes).
 
@@ -57,14 +62,14 @@ They do not execute the Forge runtime or mount UI Kit; the Forge runtime was exe
   after termination/storage failure. Queue scans can grow with expired index entries; UI shows at most 50 active entries.
 - Jira-admin authority is checked at decision time as the invoking human. The app invalidates decisions when its
   approver configuration changes; it does not recheck a past approver's Jira-admin membership as another user at run time.
-- Submission still requires a public demo video and the Devpost submission (a public repository is optional under the rules). The production
+- Submission requires a public demo video and the Devpost submission (a public repository is optional under the rules). The production
   deploy and the judge installation link exist (setup steps in README). The manifest/skill support the intended
-  Agents/MCP bonus entries; a Rovo chat run is verified for read tools and write planning (see `docs/ROVO_CHAT_RUN.md`),
+  Agents/MCP bonus entries; the full Rovo chat loop is verified in the browser (see `docs/ROVO_CHAT_RUN.md`),
   an external MCP client run is not. Teamwork Graph
   context is implemented (curated queries, read as the user). A Marketplace listing is drafted but deliberately not
   submitted (submitting would replace the private distribution link judges use).
 
-## Live site notes (a free Jira Cloud test site, development)
+## Live site notes (free Jira Cloud test site, development)
 
 - 2026-10-30: global page showed only loading skeletons. Cause: root `react@19` while `@forge/react@12` renders
   with `react-reconciler@0.29` and its own nested `react@18`; the dashboard's hooks ran on a different React copy,
@@ -79,7 +84,7 @@ They do not execute the Forge runtime or mount UI Kit; the Forge runtime was exe
   import to the whole `module.exports` object. Fixed with named imports only (`makeResolver`, `asUser`) in 45c3493;
   `test/runtime.test.js` reproduces the crash on the old code and bans default/namespace `@forge/*` imports in backend
   code. Deployed development v2.3.0. `"type": "module"` stays (tests run as native ESM; `.jsx` keeps webpack interop).
-- Codex review (work/codex_codegeist_review.md) round 1 fixes: actions read `context.principal.accountId` (the
+- Codex review round 1 fixes: actions read `context.principal.accountId` (the
   documented Forge function context; the old flat-only check would have refused every Rovo/MCP call); stale-lock
   takeover is claimed per dead lease so two callers cannot both delete-and-reacquire; KVS conflicts read
   `err.responseDetails.status`; comment/description/label sizes bounded below the 240 KiB KVS value limit; policy
@@ -95,7 +100,7 @@ They do not execute the Forge runtime or mount UI Kit; the Forge runtime was exe
   parallel, then requests/audit/usage in parallel (2 stages instead of 6 sequential round-trips) and calls
   `mypermissions` once instead of twice. Known remaining cost: `listOpenRequests` fetches each open request by id
   (parallel per page of 50) because the `open:` index stores only `createdAt`.
-- Final Codex pass (work/codex_codegeist_final.md) fixes: approval requests are size-checked on the full serialized
+- Final Codex pass fixes: approval requests are size-checked on the full serialized
   UTF-8 value before KVS writes (32k escaped text + 200 resolved targets could exceed 240 KiB); more field length
   bounds; policy editor no longer silently overwrites a newer stored policy (conflict warning, save disabled until
   discard); stale overlapping reloads ignored; double submits blocked in review and policy save; MemoryStore models
@@ -109,7 +114,7 @@ They do not execute the Forge runtime or mount UI Kit; the Forge runtime was exe
   `<project>-9001` issues, no-op writes), re-applied in `run()` on every entry point. Running a simulated request needs
   a Jira admin on every entry point (incl. Rovo `run-approved-change`). Separate dedup keys per origin; approved
   simulations stay listed (`simok:` index) until run. Two-person rule unchanged: solo demos set
-  `requireDistinctApprover: false`. Codex review: work/codex_codegeist_demo.md (3 P2 + 1 P3, all fixed with tests).
+  `requireDistinctApprover: false`. Codex review: (3 P2 + 1 P3, all fixed with tests).
   115 tests. Manifest/scopes unchanged.
 - 2026-10-30 19:35 (6e20084, dev deploy run 41049159787): UI copy fixes found while recording the demo.
   Policy caps now say "More than N issues in one call need approval" (gate uses units > threshold);
@@ -172,4 +177,4 @@ Round 5: no findings; 149 tests passing.
 - Codex review: round 1 (2 P1: probe could send credentials to any host; the run-from-chat button was unreachable
   because approved requests left the dashboard), round 2 (index pagination, probe identity, empty finals, prod/dev
   mismatch), round 3 (index ordering/pruning, test that did not paginate, tool errors passing the probe). All fixed
-  with tests. Further rounds: see `work/` review logs referenced in the project STATE.
+  with tests. Further review rounds followed until no material issues were left.

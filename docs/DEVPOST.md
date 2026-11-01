@@ -2,14 +2,13 @@
 
 Copy for the Codegeist 2026 "Enter a submission" form. Placeholders in `<>` are filled in when the video is public.
 
-> Before submitting: production (the install link) must run a build that includes the Guided demo and the Rovo
-> hand-off buttons described below. Today they are in the development build only (see `STATUS.md`).
+> Production (the install link) runs v2.2.0 (2026-11-01), which includes the Guided demo and the Rovo hand-off buttons.
 
 - **Project name:** Agent Change Gate
 - **Tagline:** Same agent, same command, different verdict: a context-aware approval gate for AI agents writing to Jira.
 - **Category:** Apps for Software Teams
 - **Bonus prize:** Best Agents (Rovo). The app also declares `rovo:mcp` and reads Teamwork Graph; the sponsor may move it.
-- **Video:** `<YouTube URL>` (2:33)
+- **Video:** `<YouTube URL>` (2:44)
 - **Installation link:** the Forge distribution link in the README (production environment).
 
 ## Inspiration
@@ -84,10 +83,11 @@ own Confirm prompt is not treated as approval: the gate decides after Confirm.
 
 ## What was verified, and limits
 
-- The video drives the gate through the in-app simulator on a live Jira Cloud site (same gate path the agent uses).
-- In a real Rovo conversation on a Forge demo site, Rovo picked the app's tools, read live Jira and Teamwork Graph
-  context, and planned a guarded transition up to Rovo's Confirm prompt. The Confirm click and the
-  approve-in-page → run-from-chat round trip remain unverified; an external MCP client was not run.
+- The video shows the Guided demo (real gate code, sample issues, no Jira writes) and a real Rovo conversation on a
+  Forge demo site with Rovo: Rovo picked the app's tools and read live context (`MOBL-12 blocks 5 open issues`); after
+  Rovo's Confirm the gate returned `PENDING_APPROVAL`; the request was approved on the app page; *Run it from Rovo
+  chat* executed it once (`MOBL-12` moved to Done in Jira); asking to run it again was refused (single use).
+- An external MCP client was not run.
 - The gate covers this app's tools only; it cannot stop other Jira tools or direct REST calls.
 
 ## What's next
