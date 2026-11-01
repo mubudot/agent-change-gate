@@ -64,7 +64,7 @@ Full steps, including how to reproduce the release-context pair on your own issu
   deployments. Approvers see count-only context; names stay with the user whose permissions read them.
 - Policy engine is pure and deterministic (no LLM in the decision). Concurrency-safe usage reservation with a
   `FAIL_IF_EXISTS` storage lease; an approval is bound to the exact resolved operation and rechecked against the current policy before it runs.
-- 197 `node:test` tests (no Atlassian account needed); independent code reviews until no material issues were left.
+- 199 `node:test` tests (no Atlassian account needed); independent code reviews until no material issues were left.
 
 ## How it meets the technology requirement
 

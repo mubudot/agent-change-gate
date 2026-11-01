@@ -47,8 +47,8 @@ Open Jira → Apps → **Agent Change Gate** as a Jira admin (site admins usuall
 
    The card's *Demo audit trail* lists every step. The demo runs the real gate code (policy, context check, approval,
    execution, caps, audit) on two sample issues in its own per-user storage, so your policy, caps, approvals and
-   audit log are not touched, and the two-person rule is off only inside the demo. *Reset demo* starts over; demo data
-   expires after 24 hours.
+   audit log are not touched, and the two-person rule is off only inside the demo. *Reset demo* starts over; a demo
+   session ends after 24 hours and its data is then cleaned up.
 
    **No Guided demo card?** The production build behind the install link may predate it (see Status). Same result
    with the simulator, still without touching any issue: Policy tab → set `"allowedProjects": ["DEMO"]` and
@@ -205,7 +205,7 @@ See `STATUS.md` for the operational limits of this approach.
 ```bash
 node --version   # tests require Node >= 22; the Forge CLI may require a newer patch
 npm ci
-node --test test/*.test.js        # 197 tests, no Atlassian account or network needed
+node --test test/*.test.js        # 199 tests, no Atlassian account or network needed
 # optional: validate manifest.yml against the schema bundled with a local Forge CLI checkout
 # (npm i -g @forge/cli, then point FORGE_CLI_DIR at its install directory)
 FORGE_CLI_DIR=<path-to-@forge/cli> node scripts/validate-manifest.cjs

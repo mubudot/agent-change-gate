@@ -11,7 +11,7 @@ the Rovo hand-off changes of 2026-10-31 and the Guided demo of 2026-11-01 are in
 **2026-11-01 (judge onboarding):** admin-only **Guided demo** on the Approvals tab (five steps on sample issues, per-user
 storage namespace, no Jira writes, no setup) and a "New here?" banner on a fresh install; live comparison presets pick
 the issue's In Progress (or in-progress-category) transition instead of assuming the status name; dashboard labels
-"Attempted targets today (site)" and "Teamwork Graph API reachable"; demo progress self-heals from the stored approval if a save is lost, and a failed load offers "Try again". Tests 161 → 197. Deployed to development
+"Attempted targets today (site)" and "Teamwork Graph API reachable"; demo progress self-heals from the stored approval if a save is lost, and a failed load offers "Try again". Tests 161 → 199. Deployed to development
 (GitHub Actions deploy run 41288358774, success). Not yet seen rendered in a browser.
 
 ## Review (2026-10-30)
@@ -136,7 +136,7 @@ They do not execute the Forge runtime or mount UI Kit; the Forge runtime was exe
 - End to end with two accounts: allow/deny/preview, protected transitions, approve/reject, self-approval refusal,
   concurrent decisions/executions, changed policy/destination, expiry during reads, partial failures, single-use replay
   and audit intent/outcome. Verify create/project resolution and writes addressed by Jira IDs.
-- Agent/skill discovery, all ten MCP tools, app exposure toggle, OAuth consent/site selection and endpoint connectivity.
+- Agent/skill discovery, all eleven MCP tools, app exposure toggle, OAuth consent/site selection and endpoint connectivity.
   Check scopes with authenticated Forge lint; no login-dependent Forge commands have been run during this review.
 
 ## References checked

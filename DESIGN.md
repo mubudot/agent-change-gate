@@ -141,7 +141,10 @@ is linked to a goal → approve → run once, replay refused → 21-issue bulk c
 whose store is a `PrefixStore` keyed by a hash of the caller's Forge account id. Policy, usage, requests, audit and the
 mutation lease all live under that prefix, so the installation's real data is untouched and the demo never takes the
 installation-wide lease. Jira and Teamwork Graph are the dry-run stand-ins seeded with `DEMO-1` / `DEMO-2`; the real
-Jira client is only asked whether the caller is a Jira admin. Demo keys carry a 24 h TTL and *Reset demo* deletes them.
+Jira client is only asked whether the caller is a Jira admin. A demo session lives 24 h (logical lifetime); each
+demo key gets a TTL of at most 24 h from its last write, and the list of demo keys used for cleanup is kept 49 h
+longer so *Reset demo* (or the next session start) can delete every member even if KVS sweeps expired keys late.
+Physical deletion after TTL is asynchronous in Forge KVS.
 The resolvers accept only a step id.
 
 ## Demo script (video, < 3 min)
