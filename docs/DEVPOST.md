@@ -1,6 +1,6 @@
 # Devpost submission text (draft, not submitted)
 
-Copy for the Codegeist 2026 "Enter a submission" form. Placeholders in `<>` are filled in when the video is public.
+Copy for the Codegeist 2026 "Enter a submission" form. All links are final.
 
 > Production (the install link) runs v2.2.0 (2026-11-01), which includes the Guided demo and the Rovo hand-off buttons.
 
@@ -8,7 +8,7 @@ Copy for the Codegeist 2026 "Enter a submission" form. Placeholders in `<>` are 
 - **Tagline:** Same agent, same command, different verdict: a context-aware approval gate for AI agents writing to Jira.
 - **Category:** Apps for Software Teams
 - **Bonus prize:** Best Agents (Rovo). The app also declares `rovo:mcp` and reads Teamwork Graph; the sponsor may move it.
-- **Video:** `<YouTube URL>` (2:44)
+- **Video:** https://youtu.be/2zit_U2xqcQ (2:44)
 - **Installation link:** the Forge distribution link in the README (production environment).
 
 ## Inspiration
