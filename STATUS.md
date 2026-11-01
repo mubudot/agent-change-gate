@@ -12,7 +12,7 @@ the Rovo hand-off changes of 2026-10-31 and the Guided demo of 2026-11-01 are in
 storage namespace, no Jira writes, no setup) and a "New here?" banner on a fresh install; live comparison presets pick
 the issue's In Progress (or in-progress-category) transition instead of assuming the status name; dashboard labels
 "Attempted targets today (site)" and "Teamwork Graph API reachable"; demo progress self-heals from the stored approval if a save is lost, and a failed load offers "Try again". Once projects are allowed, the approval queue comes first and the demo tools open from *Try guided demo* / *Test a request*. Tests 161 → 201. Deployed to development
-(GitHub Actions deploy run 41288358774, success). Not yet seen rendered in a browser.
+(latest: e884a89, GitHub Actions deploy run 41294078512, success). Not yet seen rendered in a browser.
 
 ## Review (2026-10-30)
 
