@@ -30,9 +30,11 @@ Before a change runs, the gate reads what each issue is connected to and decides
   priority, linked to an active goal, open pull request, production deployment), the change is bulk, or it touches a
   protected field or status. A human approves on a Jira page; the approval is single-use, expires, can require a
   second person, and is re-checked at run time: if new risk appeared, the run is refused.
-- **DENY**: outside the allowed projects, over the per-call/hour/day caps, kill switch on, or a runaway bulk close.
+- **DENY**: outside the allowed projects, kill switch on, or a runaway bulk change (more than 20 issues in one call by
+  default). Going over the per-user hourly/daily or per-site daily caps needs approval rather than being denied.
 
-Every decision, approval event and execution attempt goes to an audit log. Admins edit the policy, choose which
+Gate decisions on change requests, approval events and execution attempts are written to an audit log (previews
+and malformed requests are not). Admins edit the policy, choose which
 context signals need a human, and can pause all agent writes with one click.
 
 ## How to try it (judges)
@@ -61,8 +63,8 @@ Full steps, including how to reproduce the release-context pair on your own issu
 - **Teamwork Graph** (`asUser().requestTeamworkGraph()`, curated read-only queries) for linked goals, pull requests and
   deployments. Approvers see count-only context; names stay with the user whose permissions read them.
 - Policy engine is pure and deterministic (no LLM in the decision). Concurrency-safe usage reservation with a
-  `FAIL_IF_EXISTS` storage lease; approvals are fingerprinted to the exact operation and policy they cover.
-- 185 `node:test` tests (no Atlassian account needed); independent code reviews until no material issues were left.
+  `FAIL_IF_EXISTS` storage lease; an approval is bound to the exact resolved operation and rechecked against the current policy before it runs.
+- 197 `node:test` tests (no Atlassian account needed); independent code reviews until no material issues were left.
 
 ## How it meets the technology requirement
 
@@ -84,7 +86,7 @@ own Confirm prompt is not treated as approval: the gate decides after Confirm.
 - The video drives the gate through the in-app simulator on a live Jira Cloud site (same gate path the agent uses).
 - In a real Rovo conversation on a Forge demo site, Rovo picked the app's tools, read live Jira and Teamwork Graph
   context, and planned a guarded transition up to Rovo's Confirm prompt. The Confirm click and the
-  approve-in-page → run-from-chat round trip were not recorded; an external MCP client was not run.
+  approve-in-page → run-from-chat round trip remain unverified; an external MCP client was not run.
 - The gate covers this app's tools only; it cannot stop other Jira tools or direct REST calls.
 
 ## What's next

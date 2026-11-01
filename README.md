@@ -34,7 +34,7 @@ Built for Codegeist 2026: category **Apps for Software Teams**, bonus **Best Age
 
 ## Try it in 5 minutes (judges)
 
-Open Jira → Apps → **Agent Change Gate** as a Jira admin (the person who installed the app is one).
+Open Jira → Apps → **Agent Change Gate** as a Jira admin (site admins usually are; the demo and simulator are admin-only).
 
 1. **No setup, no Rovo, no Jira writes: Guided demo.** Approvals tab → *Guided demo* card (a "New here?" banner points
    to it on a fresh install). Click the five steps in order:
@@ -49,6 +49,14 @@ Open Jira → Apps → **Agent Change Gate** as a Jira admin (the person who ins
    execution, caps, audit) on two sample issues in its own per-user storage, so your policy, caps, approvals and
    audit log are not touched, and the two-person rule is off only inside the demo. *Reset demo* starts over; demo data
    expires after 24 hours.
+
+   **No Guided demo card?** The production build behind the install link may predate it (see Status). Same result
+   with the simulator, still without touching any issue: Policy tab → set `"allowedProjects": ["DEMO"]` and
+   `"requireDistinctApprover": false` → **Save policy**. Approvals tab → *Simulate an agent request*, leave *Issue key*
+   empty → **Move to In Progress** (ALLOW) → **Same move, issue ships this week** (NEEDS APPROVAL) → **Runaway bulk
+   close** (DENY). Approve the pending request in the approvals table, then **Run approved change** in the simulator's
+   table. The Audit log tab shows *Simulated (dry run)* entries. Restore your policy afterwards; simulated requests
+   count toward the caps.
 2. **On your own issues.** Policy tab → add your project key to `allowedProjects` → **Save policy**. Testing alone?
    Also set `"requireDistinctApprover": false` (set it back afterwards). Then use *Simulate an agent request* with an
    issue key; [Testing with and without Rovo](#testing-with-and-without-rovo) shows how to reproduce the video's
@@ -197,7 +205,7 @@ See `STATUS.md` for the operational limits of this approach.
 ```bash
 node --version   # tests require Node >= 22; the Forge CLI may require a newer patch
 npm ci
-node --test test/*.test.js        # 185 tests, no Atlassian account or network needed
+node --test test/*.test.js        # 197 tests, no Atlassian account or network needed
 # optional: validate manifest.yml against the schema bundled with a local Forge CLI checkout
 # (npm i -g @forge/cli, then point FORGE_CLI_DIR at its install directory)
 FORGE_CLI_DIR=<path-to-@forge/cli> node scripts/validate-manifest.cjs
