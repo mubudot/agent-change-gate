@@ -124,7 +124,10 @@ export function GuidedDemo() {
         )}
         <Stack space="space.100">
           <Heading size="xsmall">Demo audit trail</Heading>
-          <DynamicTable head={AUDIT_HEAD} rows={rows} emptyView={<Text size="small">Run the first step to see the demo audit trail.</Text>} />
+          {/* UI Kit forwards DynamicTable's emptyView unreconciled, so it must not be JSX: render a sibling instead. */}
+          {rows.length > 0
+            ? <DynamicTable head={AUDIT_HEAD} rows={rows} />
+            : <Text size="small">Run the first step to see the demo audit trail.</Text>}
         </Stack>
         <Inline alignInline="end">
           <Button appearance="subtle" isDisabled={busy} onClick={() => call('demoReset')}>Reset demo</Button>
