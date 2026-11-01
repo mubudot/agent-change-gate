@@ -40,6 +40,14 @@ export class PrefixStore {
     return { ...page, results: page.results.map(({ key, value }) => ({ key: key.slice(this.prefix.length), value })) };
   }
 
+  // Bounded point reads for views that must immediately see committed writes.
+  // Audit keys sort newest first; missing (e.g. swept) members are omitted.
+  async listFromManifest(prefix, limit = 50) {
+    const keys = (await this.get(KEY_INDEX) ?? []).filter((key) => key.startsWith(prefix)).sort().slice(0, limit);
+    const entries = await Promise.all(keys.map(async (key) => ({ key, value: await this.get(key) })));
+    return entries.filter(({ value }) => value !== undefined);
+  }
+
   // Call while holding the namespace lease. Never delete the lease itself: Repo
   // releases it in finally, so reset cannot let a concurrent mutation slip in.
   async clear() {

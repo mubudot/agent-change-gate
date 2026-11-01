@@ -76,7 +76,8 @@ export class DemoSession {
         return { status: 'OK', demo: emptyView() };
       }
       let session = await store.get('session');
-      if (session && session.expiresAt <= gate.now()) {
+      // A TTL sweep can remove the session before its other manifest members.
+      if (!session || session.expiresAt <= gate.now()) {
         await store.clear();
         session = undefined;
       }
@@ -140,7 +141,7 @@ export class DemoSession {
       nextStep: session.nextStep, results: session.results, replay: session.replay, expiresAt: session.expiresAt,
       // Use exactly the stored approver snapshot (count-only graph context).
       review: request ? { reasons: request.reasons, context: request.context } : null,
-      audit: await repo.listAuditForActor(this.actor, 10),
+      audit: (await repo.store.listFromManifest('audit:', 10)).map(({ value }) => value).filter((entry) => entry.actor === this.actor),
     };
   }
 }

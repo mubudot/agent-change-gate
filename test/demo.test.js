@@ -91,6 +91,39 @@ test('demo order is enforced on the server, including duplicate steps and replay
   assert.equal((await step(demo, 5)).code, 'DEMO_STEP_ORDER');
 });
 
+test('completed demo audit is visible through point reads when KVS queries lag', async () => {
+  const env = freshSetup();
+  env.store.listPage = async () => ({ results: [] });
+  const demo = sessionFor(env);
+  let completed;
+  for (const n of [1, 2, 3, 4, 'replay', 5]) {
+    env.advance(1000);
+    completed = await step(demo, n);
+  }
+  assert.equal(completed.demo.nextStep, null);
+  assert.equal(completed.demo.audit.length, 8);
+  assert.equal(completed.demo.audit[0].outcome, 'DENIED');
+  assert.ok(completed.demo.audit.every((entry, i, entries) => i === 0 || entries[i - 1].at >= entry.at));
+  assert.deepEqual((await demo.state()).demo.audit, completed.demo.audit);
+
+  const repo = new Repo(new PrefixStore(env.store, demoPrefix(BOB)));
+  await repo.withMutation(async () => {
+    for (let i = 1; i <= 3; i++) {
+      await repo.appendAudit({ ...completed.demo.audit[0], id: `extra-${i}`, at: env.svc.now() + i });
+    }
+  }, env.svc.now());
+  const get = env.store.get.bind(env.store);
+  const auditReads = [];
+  env.store.get = (key) => {
+    if (key.startsWith(`${demoPrefix(BOB)}audit:`)) auditReads.push(key);
+    return get(key);
+  };
+  const bounded = (await demo.state()).demo.audit;
+  assert.equal(bounded.length, 10);
+  assert.equal(auditReads.length, 10, 'only the ten newest manifest members are point-read');
+  assert.deepEqual(bounded.slice(0, 3).map((entry) => entry.id), ['extra-3', 'extra-2', 'extra-1']);
+});
+
 test('demo reset deletes all session data, even when KVS index queries lag, and starts again', async () => {
   const env = freshSetup();
   const demo = sessionFor(env);
@@ -174,14 +207,17 @@ test('bulk demo is rejected before any dry-run issue, transition or graph read',
   const demo = sessionFor(env);
   for (let i = 1; i <= 4; i++) await step(demo, i);
   const originals = [DryRunJira.prototype.getIssue, DryRunJira.prototype.getTransitions, DryRunGraph.prototype.workItemContext];
-  const noRead = () => { assert.fail('bulk deny must precede every issue/context read'); };
-  DryRunJira.prototype.getIssue = noRead;
-  DryRunJira.prototype.getTransitions = noRead;
-  DryRunGraph.prototype.workItemContext = noRead;
-  try { assert.equal((await step(demo, 5)).status, 'DENIED'); }
+  const calls = [];
+  DryRunJira.prototype.getIssue = (...args) => { calls.push(['getIssue', ...args]); };
+  DryRunJira.prototype.getTransitions = (...args) => { calls.push(['getTransitions', ...args]); };
+  DryRunGraph.prototype.workItemContext = (...args) => { calls.push(['workItemContext', ...args]); };
+  let result;
+  try { result = await step(demo, 5); }
   finally {
     [DryRunJira.prototype.getIssue, DryRunJira.prototype.getTransitions, DryRunGraph.prototype.workItemContext] = originals;
   }
+  assert.equal(result.status, 'DENIED');
+  assert.deepEqual(calls, [], 'bulk deny must precede every issue/context read');
 });
 
 test('demo uses real policy evaluation and usage caps in its namespace', async () => {
@@ -229,6 +265,26 @@ test('all demo data has a bounded TTL; logical expiry handles unswept KVS values
   assert.deepEqual(state.demo.results, {});
   assert.equal((await step(demo, 1)).status, 'EXECUTED', 'first action cleans up the expired session');
   assert.ok(![...env.store.map.keys()].some((k) => k.includes('req:') || k.includes('claim:')));
+});
+
+test('a session swept before its members is cleaned up before a new demo starts', async () => {
+  const env = freshSetup();
+  const demo = sessionFor(env);
+  const completed = await finish(demo);
+  const oldApprovalId = completed[1].approvalId;
+  env.advance(DEMO_TTL_SECONDS * 1000 + 1);
+  await env.store.delete(`${demoPrefix(BOB)}session`);
+  // Other expired members and the manifest remain readable until their sweep.
+  env.store.expiries.clear();
+  env.store.listPage = async () => ({ results: [] });
+  assert.ok(await env.store.get(`${demoPrefix(BOB)}req:${oldApprovalId}`));
+  const restarted = await step(demo, 1);
+  assert.equal(restarted.status, 'EXECUTED');
+  assert.equal(restarted.demo.nextStep, 2);
+  assert.deepEqual(Object.keys(restarted.demo.results), ['1']);
+  assert.equal(restarted.demo.audit.length, 2);
+  assert.ok(restarted.demo.audit.every((entry) => entry.at === env.svc.now()));
+  assert.ok(![...env.store.map.keys()].some((key) => key.includes('req:') || key.includes('claim:')));
 });
 
 function failProgressSave(env, n) {
