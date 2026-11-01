@@ -7,8 +7,8 @@ import { GuidedDemo } from './GuidedDemo.jsx';
 import { Simulator } from './Simulator.jsx';
 
 const TOOLS = [
-  { id: 'demo', label: 'Try guided demo' },
-  { id: 'simulate', label: 'Test a request' },
+  { id: 'demo', label: 'Try guided demo', hide: 'Hide guided demo' },
+  { id: 'simulate', label: 'Test a request', hide: 'Hide request simulator' },
 ];
 
 export function AdminTools({ data, reload }) {
@@ -26,7 +26,7 @@ export function AdminTools({ data, reload }) {
       <Inline space="space.100" alignBlock="center" shouldWrap>
         {TOOLS.map((t) => (
           <Button key={t.id} appearance={open === t.id ? 'primary' : 'default'} onClick={() => setOpen(open === t.id ? null : t.id)}>
-            {open === t.id ? `Hide ${t.label.toLowerCase()}` : t.label}
+            {open === t.id ? t.hide : t.label}
           </Button>
         ))}
       </Inline>
