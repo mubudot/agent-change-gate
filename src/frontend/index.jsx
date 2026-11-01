@@ -1,10 +1,11 @@
 // Approval dashboard (Jira global page, UI Kit). Approve/reject agent changes,
 // read the audit log, and (Jira admins) edit the policy or hit the kill switch.
-// Everything on the page comes from ONE resolver call (getDashboard).
+// The main page uses ONE resolver call (getDashboard); the isolated demo loads its own state.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ForgeReconciler, { Box, Button, Inline, SectionMessage, Spinner, Stack, Tab, TabList, TabPanel, Tabs, Text } from '@forge/react';
 import { invoke } from '@forge/bridge';
 import { countPending } from './format.js';
+import { showGuidedDemoHint } from './demo-format.js';
 import { Summary } from './components/Summary.jsx';
 import { Approvals } from './components/Approvals.jsx';
 import { AuditLog } from './components/AuditLog.jsx';
@@ -57,6 +58,11 @@ function App() {
   return (
     <Box paddingInline="space.300" paddingBlockEnd="space.300">
       <Stack space="space.300">
+        {showGuidedDemoHint(data) && (
+          <SectionMessage appearance="information" title="New here?">
+            <Text>Start with the Guided demo on the Approvals tab: no setup and no Jira writes.</Text>
+          </SectionMessage>
+        )}
         <Inline spread="space-between" alignBlock="center" shouldWrap>
           <Text>Before an AI agent writes to Jira, the gate checks what the issue is connected to (releases, blockers, goals, pull requests, deployments) and asks a human when it matters.</Text>
           <Inline space="space.100" alignBlock="center">

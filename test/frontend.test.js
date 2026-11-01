@@ -97,6 +97,38 @@ test('NEEDS APPROVAL banner is replaced once the simulated request is decided', 
 
 import { contextRulesSummary, graphStatusLabel, isContextReason, signalLabel, sourceAppearance, sourceNames } from '../src/frontend/format.js';
 import { normalizePolicy } from '../src/policy/policy.js';
+import { approvalReasonText } from '../src/frontend/format.js';
+import { DEMO_STEPS, demoResult, demoStepButton, showGuidedDemoHint } from '../src/frontend/demo-format.js';
+
+test('guided demo display: only the next step is primary and enabled, results keep verdict and refusal codes', () => {
+  assert.equal(DEMO_STEPS.length, 5);
+  assert.deepEqual(demoStepButton({ nextStep: 3 }, 3), { appearance: 'primary', isDisabled: false });
+  for (const step of [1, 2, 4, 5]) assert.equal(demoStepButton({ nextStep: 3 }, step).isDisabled, true);
+  assert.equal(demoStepButton({ nextStep: 3 }, 3, true).isDisabled, true);
+  assert.equal(demoStepButton(null, 1).isDisabled, true);
+  assert.equal(demoStepButton({ nextStep: null }, 5).isDisabled, true);
+  assert.deepEqual(demoResult({ status: 'EXECUTED', verdict: 'ALLOW', dryRun: true }), { label: 'ALLOW', detail: 'EXECUTED (dry run)', codes: [] });
+  assert.deepEqual(demoResult({ status: 'PENDING_APPROVAL', verdict: 'NEEDS_APPROVAL', reasons: [{ code: 'CONTEXT_RELEASE_SOON' }, { code: 'CONTEXT_LINKED_GOAL' }] }), { label: 'NEEDS APPROVAL', detail: '', codes: ['CONTEXT_RELEASE_SOON', 'CONTEXT_LINKED_GOAL'] });
+  assert.equal(demoResult({ status: 'APPROVED' }).label, 'APPROVED');
+  assert.equal(demoResult({ status: 'EXECUTED', dryRun: true }).detail, '(dry run)');
+  assert.equal(demoResult({ status: 'DENIED', verdict: 'DENY' }).label, 'DENY');
+  assert.deepEqual(demoResult({ status: 'REFUSED', approvalStatus: 'EXECUTED', code: 'ALREADY_USED' }), { label: 'REFUSED', detail: '', codes: ['ALREADY_USED'] });
+  assert.equal(demoResult(null), null);
+  assert.equal(statusAppearance('NEEDS APPROVAL'), 'moved');
+  assert.equal(statusAppearance('REFUSED'), 'removed');
+});
+
+test('guided demo hint is only shown to admins with an empty project allowlist', () => {
+  assert.equal(showGuidedDemoHint({ isAdmin: true, policy: { allowedProjects: [] } }), true);
+  assert.equal(showGuidedDemoHint({ isAdmin: false, policy: { allowedProjects: [] } }), false);
+  assert.equal(showGuidedDemoHint({ isAdmin: true, policy: { allowedProjects: ['DEMO'] } }), false);
+  assert.equal(showGuidedDemoHint(null), false);
+});
+
+test('guided demo and real review dialog share the stored approver-safe reason text', () => {
+  assert.equal(approvalReasonText({ reasons: [{ message: 'release in 3 days' }, { message: 'linked to 1 active goal' }] }), 'release in 3 days · linked to 1 active goal');
+  assert.equal(approvalReasonText({ reasons: [] }), 'Policy requires approval.');
+});
 
 test('context display helpers', () => {
   const { policy } = normalizePolicy({ contextRisk: { signals: { HIGH_PRIORITY: 'off', LINKED_GOAL: 'deny' } } });

@@ -20,6 +20,10 @@ const STATUS_APPEARANCE = {
   REJECTED: 'removed',
   FAILED: 'removed',
   EXPIRED: 'default',
+  ALLOW: 'success',
+  'NEEDS APPROVAL': 'moved',
+  DENY: 'removed',
+  REFUSED: 'removed',
 };
 export const statusAppearance = (status) => STATUS_APPEARANCE[status] ?? 'default';
 
@@ -71,6 +75,9 @@ export function changeSummary(op) {
 }
 
 export const countPending = (requests = []) => requests.filter((r) => r.status === 'PENDING').length;
+
+/** The review dialog and guided demo both render the stored, approver-safe reasons. */
+export const approvalReasonText = (request) => (request?.reasons ?? []).map((r) => r.message).join(' · ') || 'Policy requires approval.';
 
 /** Who started a gate decision: an agent (Rovo/MCP), the admin demo panel, or an admin. */
 export function sourceLabel(entry) {

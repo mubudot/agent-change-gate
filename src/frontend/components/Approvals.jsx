@@ -21,9 +21,10 @@ import {
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 import { approvalDetails } from '../approval-details.js';
-import { changeSummary, formatTime, operationLabel, relativeTime, sourceLabel, targetList } from '../format.js';
+import { approvalReasonText, changeSummary, formatTime, operationLabel, relativeTime, sourceLabel, targetList } from '../format.js';
 import { EmptyNotice, Feedback, Section, StatusLozenge, resultMessage } from './ui.jsx';
 import { Simulator } from './Simulator.jsx';
+import { GuidedDemo } from './GuidedDemo.jsx';
 import { ContextSignals, SourceLozenge } from './ContextSignals.jsx';
 import { AskAgentButton } from './AskAgent.jsx';
 import { canRunFromChat, runApprovedPrompt } from '../rovo-prompts.js';
@@ -85,7 +86,7 @@ function ReviewModal({ request, data, onClose, onDecided }) {
             </SectionMessage>
           )}
           <SectionMessage appearance="warning" title="Why this needs a human">
-            <Text>{request.reasons.map((x) => x.message).join(' · ') || 'Policy requires approval.'}</Text>
+            <Text>{approvalReasonText(request)}</Text>
           </SectionMessage>
           {request.context && (
             <Stack space="space.100">
@@ -185,6 +186,7 @@ export function Approvals({ data, loading, reload }) {
 
   return (
     <Section>
+      {data.isAdmin && <GuidedDemo />}
       {data.isAdmin && <Simulator data={data} reload={reload} />}
       <Feedback message={message} />
       {!data.isApprover && (

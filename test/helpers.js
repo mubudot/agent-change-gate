@@ -63,7 +63,7 @@ export function fakeJira({ admins = [BOB], issues } = {}) {
   return { state, client: new JiraClient(request) };
 }
 
-export async function setup({ policy = {}, admins, graph = null, approvalPage } = {}) {
+export function freshSetup({ admins, graph = null, approvalPage } = {}) {
   let t = Date.UTC(2026, 10, 2, 9, 0, 0);
   const store = new MemoryStore(() => t);
   const repo = new Repo(store);
@@ -77,14 +77,19 @@ export async function setup({ policy = {}, admins, graph = null, approvalPage } 
     newId: () => `id-${String(++n).padStart(6, '0')}`,
     ...(approvalPage ? { approvalPage } : {}),
   });
-  const saved = await repo.savePolicy({ allowedProjects: ['DEMO'], ...policy });
-  if (!saved.ok) throw new Error(saved.errors.join('; '));
   return {
     svc, repo, store, jira,
     advance: (ms) => { t += ms; },
     as: (who) => { jira.state.caller = who; },
     writes: () => jira.state.calls.filter((c) => c.method !== 'GET'),
   };
+}
+
+export async function setup({ policy = {}, ...options } = {}) {
+  const env = freshSetup(options);
+  const saved = await env.repo.savePolicy({ allowedProjects: ['DEMO'], ...policy });
+  if (!saved.ok) throw new Error(saved.errors.join('; '));
+  return env;
 }
 
 /** Fake Teamwork Graph: answers workItemContext from a map of issueId -> facts. */
