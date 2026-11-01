@@ -15,11 +15,11 @@ export function useRovoEnabled() {
   return enabled;
 }
 
-/** Opens a new Rovo conversation with the Change Gate Agent; prompt is optional. */
-export function AskAgentButton({ prompt, children, appearance = 'default', onError }) {
+/** Opens a new Rovo conversation with the Change Gate Agent; prompt is optional. onOpened runs once Rovo has opened. */
+export function AskAgentButton({ prompt, children, appearance = 'default', onError, onOpened }) {
   const enabled = useRovoEnabled();
   if (!enabled) return null;
   const open = () =>
-    rovo.open(prompt ? { ...CHANGE_GATE_AGENT, prompt } : { ...CHANGE_GATE_AGENT }).catch((e) => onError?.(String(e)));
+    rovo.open(prompt ? { ...CHANGE_GATE_AGENT, prompt } : { ...CHANGE_GATE_AGENT }).then(() => onOpened?.(), (e) => onError?.(String(e)));
   return <Button appearance={appearance} onClick={open}>{children}</Button>;
 }

@@ -117,6 +117,7 @@ function ReviewModal({ request, data, onClose, onDecided }) {
             appearance="primary"
             prompt={runApprovedPrompt(request.id)}
             onError={(text) => setMessage({ tone: 'error', text: `Could not open Rovo chat: ${text}` })}
+            onOpened={onClose}
           >
             Run it from Rovo chat
           </AskAgentButton>
