@@ -1,4 +1,4 @@
-# Devpost submission text (draft, not submitted)
+# Devpost submission text (submitted 2026-11-01: https://devpost.com/software/agent-change-gate)
 
 Copy for the Codegeist 2026 "Enter a submission" form. All links are final.
 

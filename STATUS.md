@@ -3,7 +3,7 @@
 Deployed to Forge **production** (v2.2.0, 2026-11-01, code c39afe0, the version the judge install link installs) and to the
 development environment, which is installed on a free Jira Cloud test site. The global page (approvals, policy,
 audit log, kill switch, simulation panel) and the context-aware gate (Jira release facts, Teamwork Graph reads) were
-exercised there with live issues. Not submitted to Devpost or the Marketplace. The full Rovo loop (Confirm →
+exercised there with live issues. Submitted to Codegeist 2026 on Devpost (2026-11-01, https://devpost.com/software/agent-change-gate); not listed on the Marketplace. The full Rovo loop (Confirm →
 pending → approve on the page → run from chat → second run refused) was run in the browser on a Forge demo site
 (development environment, 2026-11-01, see `docs/ROVO_CHAT_RUN.md`); an external MCP client is not verified.
 
@@ -62,7 +62,7 @@ They do not execute the Forge runtime or mount UI Kit; the Forge runtime was exe
   after termination/storage failure. Queue scans can grow with expired index entries; UI shows at most 50 active entries.
 - Jira-admin authority is checked at decision time as the invoking human. The app invalidates decisions when its
   approver configuration changes; it does not recheck a past approver's Jira-admin membership as another user at run time.
-- Submission requires a public demo video and the Devpost submission (a public repository is optional under the rules). The production
+- Submitted on Devpost 2026-11-01 with the public demo video (https://youtu.be/2zit_U2xqcQ) and this public repository. The production
   deploy and the judge installation link exist (setup steps in README). The manifest/skill support the intended
   Agents/MCP bonus entries; the full Rovo chat loop is verified in the browser (see `docs/ROVO_CHAT_RUN.md`),
   an external MCP client run is not. Teamwork Graph
