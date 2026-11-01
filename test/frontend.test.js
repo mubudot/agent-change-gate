@@ -1,6 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { approvalDetails } from '../src/frontend/approval-details.js';
+import { loadDemoState } from '../src/frontend/demo-load.js';
+
+test('guided demo load can be retried after rejection without resetting stored progress', async () => {
+  const progress = { nextStep: 4, results: { 3: { status: 'APPROVED' } } };
+  const calls = [];
+  const invoke = async (...args) => {
+    calls.push(args);
+    if (calls.length === 1) throw new Error('temporary failure');
+    return { status: 'OK', demo: progress };
+  };
+  const failed = await loadDemoState(invoke, null);
+  assert.equal(failed.loadFailed, true);
+  assert.match(failed.message.text, /temporary failure/);
+  const retried = await loadDemoState(invoke, failed.demo);
+  assert.deepEqual(retried, { demo: progress, message: null, loadFailed: false });
+  assert.deepEqual(calls, [['demoState'], ['demoState']], 'retry only reads progress');
+  const laterFailure = await loadDemoState(async () => ({ status: 'INVALID', errors: ['unavailable'] }), progress);
+  assert.equal(laterFailure.demo, progress);
+  assert.equal(laterFailure.loadFailed, true);
+  assert.equal(laterFailure.message.text, 'unavailable');
+});
 
 test('human review includes requester, expiry and exact untruncated operation payload', () => {
   const request = {

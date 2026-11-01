@@ -2,6 +2,9 @@
 // the prefix applies to EVERYTHING, including leases, indexes, usage and audit.
 const KEY_INDEX = '__keys';
 const isLease = (key) => key.startsWith('mutation-lock:');
+// KVS may sweep members up to 48 hours after expiry. An extra hour also
+// covers the invocation time between recording a key and writing its value.
+export const MANIFEST_RETENTION_SECONDS = 49 * 3600;
 
 export class PrefixStore {
   constructor(store, prefix, { ttlSeconds = 86400 } = {}) {
@@ -20,7 +23,7 @@ export class PrefixStore {
     // if KVS prefix queries have not yet caught up or a previous invocation failed.
     if (!isLease(key)) {
       const keys = await this.get(KEY_INDEX) ?? [];
-      await this.store.set(this.prefix + KEY_INDEX, keys.includes(key) ? keys : [...keys, key], { ttlSeconds: this.ttlSeconds });
+      await this.store.set(this.prefix + KEY_INDEX, keys.includes(key) ? keys : [...keys, key], { ttlSeconds: this.ttlSeconds + MANIFEST_RETENTION_SECONDS });
     }
     return this.store.set(this.prefix + key, value, {
       ...options,

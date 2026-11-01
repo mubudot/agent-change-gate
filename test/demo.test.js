@@ -4,7 +4,7 @@ import { freshSetup, setup, ALICE, BOB, fakeGraph } from './helpers.js';
 import { DemoSession, demoPrefix, demoSeed, DEMO_TTL_SECONDS } from '../src/simulation/demo-session.js';
 import { DryRunJira } from '../src/simulation/dry-run-jira.js';
 import { DryRunGraph } from '../src/simulation/dry-run-graph.js';
-import { PrefixStore } from '../src/store/prefix.js';
+import { PrefixStore, MANIFEST_RETENTION_SECONDS } from '../src/store/prefix.js';
 import { Repo } from '../src/store/repo.js';
 import { MemoryStore } from '../src/store/memory.js';
 
@@ -217,7 +217,8 @@ test('all demo data has a bounded TTL; logical expiry handles unswept KVS values
   const demo = sessionFor(env);
   await finish(demo);
   for (const key of env.store.map.keys()) {
-    assert.ok(env.store.expiries.get(key) <= env.svc.now() + DEMO_TTL_SECONDS * 1000, key);
+    const ttl = DEMO_TTL_SECONDS + (key.endsWith(':__keys') ? MANIFEST_RETENTION_SECONDS : 0);
+    assert.ok(env.store.expiries.get(key) <= env.svc.now() + ttl * 1000, key);
   }
   // KVS can retain expired values: logical session expiry still resets progress.
   env.store.expiries.clear();
@@ -228,6 +229,127 @@ test('all demo data has a bounded TTL; logical expiry handles unswept KVS values
   assert.deepEqual(state.demo.results, {});
   assert.equal((await step(demo, 1)).status, 'EXECUTED', 'first action cleans up the expired session');
   assert.ok(![...env.store.map.keys()].some((k) => k.includes('req:') || k.includes('claim:')));
+});
+
+function failProgressSave(env, n) {
+  const original = env.store.set.bind(env.store);
+  let failed = false;
+  env.store.set = async (key, value, options) => {
+    if (!failed && key === `${demoPrefix(BOB)}session` && value.nextStep === n + 1) {
+      failed = true;
+      throw new Error('injected session save failure');
+    }
+    return original(key, value, options);
+  };
+}
+
+for (const n of [2, 3, 4]) {
+  for (const reload of [false, true]) {
+    test(`demo step ${n} recovers a lost progress save${reload ? ' after reload' : ' on retry'} without repeating gate work`, async () => {
+      const env = freshSetup();
+      let demo = sessionFor(env);
+      for (let i = 1; i < n; i++) await step(demo, i);
+      failProgressSave(env, n);
+      await assert.rejects(step(demo, n), /injected session save failure/);
+      const members = () => [...env.store.map].filter(([key]) => !key.endsWith(':session') && !key.endsWith(':__keys'));
+      const before = members();
+      const repo = new Repo(new PrefixStore(env.store, demoPrefix(BOB)));
+      const request = JSON.parse([...env.store.map].find(([key]) => key.startsWith(`${demoPrefix(BOB)}req:`))[1]);
+      assert.equal(request.status, { 2: 'PENDING', 3: 'APPROVED', 4: 'EXECUTED' }[n]);
+      if (reload) {
+        demo = sessionFor(env);
+        const snapshot = new Map(env.store.map);
+        const state = await demo.state();
+        assert.equal(state.demo.nextStep, n === 2 ? 2 : n + 1);
+        assert.deepEqual(env.store.map, snapshot, 'reconciliation on load remains read-only');
+      }
+      const retry = await step(demo, n);
+      assert.equal(retry.status, { 2: 'PENDING_APPROVAL', 3: 'APPROVED', 4: 'EXECUTED' }[n]);
+      assert.equal(retry.demo.nextStep, n + 1);
+      assert.deepEqual(members(), before, 'no duplicate request, decision, execution, usage, claim or audit');
+      if (n === 4) {
+        assert.deepEqual(retry.results, (await repo.getRequest(request.id)).result.results);
+        assert.equal(retry.approvedBy, BOB);
+        assert.equal(retry.dryRun, true);
+      }
+      for (let i = n + 1; i <= 5; i++) await step(demo, i);
+      assert.equal((await demo.state()).demo.nextStep, null);
+    });
+  }
+}
+
+test('demo reconciles an interrupted approval before running step 4 directly', async () => {
+  const env = freshSetup();
+  const demo = sessionFor(env);
+  await step(demo, 1);
+  await step(demo, 2);
+  failProgressSave(env, 3);
+  await assert.rejects(step(demo, 3), /injected session save failure/);
+  const run = await step(demo, 4);
+  assert.equal(run.status, 'EXECUTED');
+  assert.equal(run.demo.results[3].status, 'APPROVED');
+  assert.equal(run.demo.nextStep, 5);
+});
+
+test('demo reconciles an interrupted execution before replay without executing twice', async () => {
+  const env = freshSetup();
+  const demo = sessionFor(env);
+  for (let i = 1; i <= 3; i++) await step(demo, i);
+  failProgressSave(env, 4);
+  await assert.rejects(step(demo, 4), /injected session save failure/);
+  const replay = await step(demo, 'replay');
+  assert.equal(replay.code, 'ALREADY_USED');
+  assert.equal(replay.demo.results[4].status, 'EXECUTED');
+  assert.equal(replay.demo.nextStep, 5);
+  assert.equal(replay.demo.audit.filter((entry) => entry.approvalId && entry.outcome === 'EXECUTED').length, 1);
+});
+
+test('a consumed demo approval advances progress without inventing a successful execution', async () => {
+  const env = freshSetup();
+  const demo = sessionFor(env);
+  await step(demo, 1);
+  const pending = await step(demo, 2);
+  await step(demo, 3);
+  const repo = new Repo(new PrefixStore(env.store, demoPrefix(BOB)));
+  await repo.claimExecution(pending.approvalId, BOB, env.svc.now());
+  const state = await demo.state();
+  assert.equal(state.demo.nextStep, 5);
+  assert.equal(state.demo.results[4].status, 'REFUSED');
+  assert.equal(state.demo.results[4].code, 'ALREADY_USED');
+  assert.equal((await step(demo, 'replay')).code, 'ALREADY_USED');
+  assert.equal((await step(demo, 5)).demo.nextStep, null);
+});
+
+test('reset retains its manifest through a partial TTL sweep even when prefix queries lag', async () => {
+  const env = freshSetup();
+  const demo = sessionFor(env);
+  await finish(demo);
+  const manifest = `${demoPrefix(BOB)}__keys`;
+  const memberExpiries = [...env.store.expiries].filter(([key]) => key !== manifest).map(([, expiry]) => expiry);
+  assert.ok(env.store.expiries.get(manifest) > Math.max(...memberExpiries) + 48 * 3600_000);
+  env.advance(DEMO_TTL_SECONDS * 1000 + 1);
+  // Model a sweep that visits only the manifest; other expired members remain
+  // visible to point reads, and the eventually consistent query sees nothing.
+  if (env.store.expiries.get(manifest) <= env.svc.now()) await env.store.delete(manifest);
+  for (const key of env.store.expiries.keys()) {
+    if (key !== manifest) env.store.expiries.delete(key);
+  }
+  assert.ok([...env.store.map.keys()].some((key) => key.includes('req:')));
+  env.store.listPage = async () => ({ results: [] });
+  assert.equal((await demo.reset()).status, 'OK');
+  assert.equal(env.store.map.size, 0, 'all unswept members are deleted using the retained manifest');
+});
+
+test('each member write extends manifest retention beyond the latest member sweep', async () => {
+  const env = freshSetup();
+  const prefix = demoPrefix(BOB);
+  const store = new PrefixStore(env.store, prefix);
+  await store.set('first', 1);
+  const initialExpiry = env.store.expiries.get(`${prefix}__keys`);
+  env.advance(12 * 3600_000);
+  await store.set('second', 2);
+  assert.ok(env.store.expiries.get(`${prefix}__keys`) > initialExpiry);
+  assert.ok(env.store.expiries.get(`${prefix}__keys`) > env.store.expiries.get(`${prefix}second`) + 48 * 3600_000);
 });
 
 test('demo fixtures describe only DEMO-1 (routine) and DEMO-2 (release plus goal)', async () => {

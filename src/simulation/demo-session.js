@@ -6,6 +6,7 @@ import { Repo } from '../store/repo.js';
 import { PrefixStore } from '../store/prefix.js';
 import { DryRunJira } from './dry-run-jira.js';
 import { DryRunGraph } from './dry-run-graph.js';
+import { reconcileDemoProgress } from './demo-progress.js';
 
 export const DEMO_TTL_SECONDS = 86400;
 export const demoPrefix = (actor) => `demo:${createHash('sha256').update(actor).digest('hex')}:`;
@@ -61,7 +62,9 @@ export class DemoSession {
     // can read the last committed progress without competing for a mutation lease.
     if (action === 'state') {
       const session = await store.get('session');
-      return { status: 'OK', demo: session && session.expiresAt > gate.now() ? await this.view(repo, session) : emptyView() };
+      if (!session || session.expiresAt <= gate.now()) return { status: 'OK', demo: emptyView() };
+      await reconcileDemoProgress(repo, session);
+      return { status: 'OK', demo: await this.view(repo, session) };
     }
     // Hold ONE of Repo's existing bucket leases over order validation, gate work
     // and progress persistence. Call change/decide/run inside it (their public
@@ -83,7 +86,14 @@ export class DemoSession {
         await store.set('session', session);
       }
       const step = payload.step;
-      if (step === 'replay' ? session.results[4]?.status !== 'EXECUTED' : step !== session.nextStep) {
+      const previousNext = session.nextStep;
+      await reconcileDemoProgress(repo, session);
+      if (previousNext !== session.nextStep) {
+        await store.set('session', session);
+        // A retry of the interrupted step returns its stored outcome.
+        if (step === previousNext) return { ...session.results[step], demo: await this.view(repo, session) };
+      }
+      if (step === 'replay' ? !session.results[4] || session.nextStep === 4 : step !== session.nextStep) {
         return { ...orderError(session.nextStep), demo: await this.view(repo, session) };
       }
       // Repeated clicks on the replay example return the first refusal; they do

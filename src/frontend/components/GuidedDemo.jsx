@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Button, DynamicTable, Heading, Inline, Lozenge, SectionMessage, Spinner, Stack, Strong, Tag, Text } from '@forge/react';
 import { invoke } from '@forge/bridge';
 import { DEMO_STEPS, demoResult, demoStepButton } from '../demo-format.js';
+import { loadDemoState } from '../demo-load.js';
 import { approvalReasonText, formatTime } from '../format.js';
 import { Card, Feedback, StatusLozenge } from './ui.jsx';
 import { ContextSignals } from './ContextSignals.jsx';
@@ -27,18 +28,23 @@ export function GuidedDemo() {
   const [demo, setDemo] = useState(null);
   const [busy, setBusy] = useState(true);
   const [message, setMessage] = useState(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const inFlight = useRef(false);
   // Protect the initial load from StrictMode's effect cleanup and late responses.
   const loadId = useRef(0);
-  useEffect(() => {
+  const load = async () => {
     const id = ++loadId.current;
-    invoke('demoState').then((r) => {
-      if (id !== loadId.current) return;
-      if (r.demo) setDemo(r.demo);
-      else setMessage({ tone: 'warning', text: r.message || (r.errors ?? []).join('; ') || 'Could not load the demo.' });
-    }).catch((e) => {
-      if (id === loadId.current) setMessage({ tone: 'error', text: `Could not load the demo: ${String(e)}` });
-    }).finally(() => { if (id === loadId.current) setBusy(false); });
+    setBusy(true);
+    setMessage(null);
+    const result = await loadDemoState(invoke, demo);
+    if (id !== loadId.current) return;
+    setDemo(result.demo);
+    setMessage(result.message);
+    setLoadFailed(result.loadFailed);
+    setBusy(false);
+  };
+  useEffect(() => {
+    load();
     return () => { loadId.current++; };
   }, []);
 
@@ -49,7 +55,7 @@ export function GuidedDemo() {
     setMessage(null);
     try {
       const r = await invoke(fn, payload);
-      if (r.demo) setDemo(r.demo);
+      if (r.demo) { setDemo(r.demo); setLoadFailed(false); }
       if (r.status === 'INVALID' || (r.status === 'REFUSED' && payload?.step !== 'replay')) {
         setMessage({ tone: 'warning', text: r.message || (r.errors ?? []).join('; ') || 'The demo step was not completed.' });
       }
@@ -80,6 +86,7 @@ export function GuidedDemo() {
         </Inline>
         <Text>Run a routine change, review a release-critical change, then block a bulk request. Uses sample issues and this app's policy engine. No Rovo, no setup and no connected Teamwork Graph data needed.</Text>
         <Feedback message={message} />
+        {loadFailed && <Button isDisabled={busy} onClick={load}>Try again</Button>}
         {busy && !demo && <Spinner label="Loading guided demo" />}
         <Stack space="space.300">
           {DEMO_STEPS.map((step) => (
@@ -101,7 +108,7 @@ export function GuidedDemo() {
                 <Button {...demoStepButton(demo, step.id, busy)} onClick={() => call('demoStep', { step: step.id })}>{step.action}</Button>
                 <Result result={demo?.results[step.id]} />
               </Inline>
-              {step.id === 4 && demo?.results[4]?.status === 'EXECUTED' && (
+              {step.id === 4 && demo?.results[4] && demo.nextStep !== 4 && (
                 <Inline space="space.100" alignBlock="center" shouldWrap>
                   <Button appearance="default" isDisabled={busy || Boolean(demo.replay)} onClick={() => call('demoStep', { step: 'replay' })}>Try to run it again</Button>
                   <Result result={demo.replay} />
