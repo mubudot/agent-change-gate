@@ -1,11 +1,12 @@
 // Admin "Simulate agent request": same gate path as Rovo/MCP actions, marked source 'simulated'.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { setup, ALICE, BOB } from './helpers.js';
+import { setup, ALICE, BOB, fakeGraph } from './helpers.js';
 import { buildPreset, presetList } from '../src/simulation/presets.js';
 import { DryRunJira } from '../src/simulation/dry-run-jira.js';
 import { resolverDefinitions, buildResolver } from '../src/resolvers.js';
 import { normalizePolicy } from '../src/policy/policy.js';
+import { progressDestination } from '../src/simulation/destination.js';
 
 // BOB is the Jira admin in the fake site; ALICE is a second approver so the two-person rule can be met.
 const twoApprovers = { policy: { approvers: [ALICE, BOB] } };
@@ -208,4 +209,82 @@ test('an approved simulation keeps its Run control even after many newer simulat
   assert.equal(row?.status, 'APPROVED');
   assert.equal((await env.svc.runSimulated(first, BOB)).status, 'EXECUTED');
   assert.ok(!(await env.svc.dashboard(BOB)).simulations.some((r) => r.id === first), 'gone from the approved index once run');
+});
+
+test('both live comparison resolvers select Working in a workflow without In Progress', async () => {
+  const graph = fakeGraph();
+  const env = await setup({ graph, policy: { requireDistinctApprover: false } });
+  env.as(BOB);
+  env.jira.state.transitions[0].to = { id: '1', name: 'Working', statusCategory: { key: 'indeterminate' } };
+  env.jira.state.issues['DEMO-2'].fields = {
+    fixVersions: [{ name: 'Release', released: false, releaseDate: new Date(env.svc.now() + 3 * 86400_000).toISOString().slice(0, 10) }],
+  };
+  graph.byIssueId[env.jira.state.issues['DEMO-2'].id] = { goals: [{ name: 'Company goal', archived: false }] };
+  const defs = resolverDefinitions(() => env.svc);
+  const invoke = (preset, issueKey) => defs.simulate({ context: { accountId: BOB }, payload: { preset, issueKey } });
+  const routine = await invoke('routine-move', 'DEMO-1');
+  assert.equal(routine.status, 'EXECUTED');
+  assert.equal(env.jira.state.issues['DEMO-1'].status, 'Working');
+  const context = await invoke('context-move', 'DEMO-2');
+  assert.equal(context.status, 'PENDING_APPROVAL');
+  assert.deepEqual(context.reasons.map((r) => r.code), ['CONTEXT_RELEASE_SOON', 'CONTEXT_LINKED_GOAL']);
+  const req = await env.repo.getRequest(context.approvalId);
+  assert.equal(req.op.payload.toStatus, 'Working');
+  assert.equal(req.op.targets[0].transitionId, '11');
+  await env.svc.decideRequest(req.id, true, undefined, BOB);
+  assert.equal((await env.svc.runSimulated(req.id, BOB)).status, 'EXECUTED');
+  assert.equal(env.jira.state.issues['DEMO-2'].status, 'Working');
+});
+
+test('live comparison prefers In Progress case-insensitively over an earlier indeterminate destination', async () => {
+  const env = await setup();
+  env.as(BOB);
+  env.jira.state.transitions.splice(0, 3,
+    { id: '11', name: 'Start', to: { id: '1', name: 'Working', statusCategory: { key: 'indeterminate' } } },
+    { id: '21', name: 'Continue', to: { id: '2', name: 'iN pRoGrEsS', statusCategory: { key: 'indeterminate' } } },
+  );
+  for (const preset of ['routine-move', 'context-move']) {
+    assert.equal((await env.svc.simulate(preset, 'DEMO-1', BOB)).status, 'EXECUTED');
+    assert.equal(env.jira.state.issues['DEMO-1'].status, 'iN pRoGrEsS');
+  }
+});
+
+test('destination selection recognises transition names and uses the first indeterminate fallback', () => {
+  const working = { name: 'Start', to: 'Working', toCategory: 'indeterminate' };
+  const review = { name: 'Review', to: 'In Review', toCategory: 'indeterminate' };
+  assert.equal(progressDestination('DEMO-1', [working, review]).destination, 'Working');
+  assert.equal(progressDestination('DEMO-1', [working, { name: 'iN pRoGrEsS', to: 'Started' }]).destination, 'Started');
+});
+
+test('both live comparison presets return INVALID with available transition names when no destination fits', async () => {
+  const env = await setup();
+  env.as(BOB);
+  env.jira.state.transitions.splice(0, 3,
+    { id: '31', name: 'Finish', to: { id: '3', name: 'Done', statusCategory: { key: 'done' } } },
+    { id: '41', name: 'Reopen', to: { id: '4', name: 'To Do', statusCategory: { key: 'new' } } },
+  );
+  for (const preset of ['routine-move', 'context-move']) {
+    const r = await env.svc.simulate(preset, 'DEMO-1', BOB);
+    assert.equal(r.status, 'INVALID');
+    assert.match(r.errors[0], /DEMO-1.*no available In Progress/);
+    assert.match(r.errors[0], /Available transitions: Finish → Done, Reopen → To Do/);
+  }
+  assert.equal(env.writes().length, 0);
+  assert.deepEqual(await env.repo.listAudit(), []);
+  assert.deepEqual(await env.repo.listOpenRequests(), []);
+  env.jira.state.transitions.splice(0);
+  assert.match((await env.svc.simulate('routine-move', 'DEMO-1', BOB)).errors[0], /Available transitions: none/);
+});
+
+test('live transition read failures return INVALID; dry-run comparison destinations never query real Jira', async () => {
+  const env = await setup();
+  env.as(BOB);
+  env.jira.client.getTransitions = async () => { throw new Error('Jira refused to list transitions (HTTP 403)'); };
+  assert.match((await env.svc.simulate('routine-move', 'DEMO-1', BOB)).errors[0], /HTTP 403/);
+  assert.equal((await env.svc.simulate('routine-move', undefined, BOB)).status, 'EXECUTED');
+  assert.equal((await env.svc.simulate('context-move', undefined, BOB)).status, 'PENDING_APPROVAL');
+  assert.equal(env.writes().length, 0);
+  assert.ok(env.jira.state.calls.every((c) => c.path.includes('mypermissions')));
+  const { policy } = normalizePolicy({ allowedProjects: ['DEMO'] });
+  assert.equal(buildPreset('routine-move', policy, undefined, env.svc.now(), 'Working').plan.input.toStatus, 'In Progress');
 });

@@ -139,7 +139,8 @@ test('context display helpers', () => {
   assert.ok(contextRulesSummary(policy).includes('Linked to a goal (block)'));
   assert.ok(!contextRulesSummary(policy).includes('High priority'));
   assert.equal(isContextReason({ code: 'CONTEXT_LINKED_GOAL' }), true);
-  assert.equal(graphStatusLabel(policy, { ok: true }).text, 'Teamwork Graph connected');
+  assert.equal(graphStatusLabel(policy, { ok: true }).text, 'Teamwork Graph API reachable');
+  assert.equal(graphStatusLabel(policy, { ok: false }).text, 'Teamwork Graph API not reachable');
   assert.match(graphStatusLabel(policy, { ok: false, error: 'HTTP 401' }).detail, /HTTP 401/);
   assert.equal(graphStatusLabel(normalizePolicy({ contextRisk: { enabled: false } }).policy).text, 'Context checks off');
 });

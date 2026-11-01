@@ -181,6 +181,6 @@ export const isContextReason = (reason) => String(reason?.code ?? '').startsWith
 export function graphStatusLabel(policy, status) {
   if (!policy?.contextRisk?.enabled) return { text: 'Context checks off', appearance: 'default' };
   if (!policy.contextRisk.useTeamworkGraph) return { text: 'Jira context only', appearance: 'inprogress' };
-  if (status?.ok) return { text: 'Teamwork Graph connected', appearance: 'new' };
-  return { text: 'Jira context only', appearance: 'moved', detail: status?.error ? `Teamwork Graph unavailable: ${status.error}` : 'Teamwork Graph unavailable' };
+  if (status?.ok) return { text: 'Teamwork Graph API reachable', appearance: 'new' };
+  return { text: 'Teamwork Graph API not reachable', appearance: 'moved', ...(status?.error ? { detail: status.error } : {}) };
 }

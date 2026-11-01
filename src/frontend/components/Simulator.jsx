@@ -115,7 +115,7 @@ export function Simulator({ data, reload }) {
         <PresetRow title="Policy rules" presets={RULE_PRESETS} busy={busy} onRun={(id) => call('simulate', { preset: id, ...(key ? { issueKey: key } : {}) })} />
         <PresetRow
           title="Same command, different context"
-          hint={key ? `Live: the gate reads ${key.toUpperCase()}'s real Jira and Teamwork Graph context.` : 'Dry run: on the second button the synthetic issue ships in 3 days and is linked to a goal.'}
+          hint={key ? `Live: the gate reads ${key.toUpperCase()}'s real Jira and Teamwork Graph context. Both moves use an available In Progress destination, or the first in-progress status in this workflow.` : 'Dry run: on the second button the synthetic issue ships in 3 days and is linked to a goal.'}
           presets={CONTEXT_PRESETS}
           busy={busy}
           onRun={(id) => call('simulate', { preset: id, ...(key ? { issueKey: key } : {}) })}

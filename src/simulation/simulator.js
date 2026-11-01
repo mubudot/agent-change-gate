@@ -4,6 +4,7 @@
 import { buildPreset } from './presets.js';
 import { DryRunJira } from './dry-run-jira.js';
 import { DryRunGraph } from './dry-run-graph.js';
+import { progressDestination } from './destination.js';
 
 const refuse = () => ({ status: 'REFUSED', code: 'NOT_ADMIN', message: 'only Jira administrators can simulate agent requests' });
 
@@ -21,8 +22,19 @@ export async function simulateRequest(service, presetId, issueKey, actor) {
   if (!actor) return { status: 'INVALID', errors: ['no user context'] };
   if (!(await service.jira.isJiraAdmin())) return refuse();
   const { policy } = await service.repo.loadPolicy();
-  const { plan, error } = buildPreset(String(presetId ?? ''), policy, issueKey, service.now());
+  const now = service.now();
+  let { plan, error } = buildPreset(String(presetId ?? ''), policy, issueKey, now);
   if (!plan) return { status: 'INVALID', errors: [error] };
+  if (plan.simulation.mode === 'live' && ['routine-move', 'context-move'].includes(presetId)) {
+    try {
+      const transitions = await service.jira.getTransitions(plan.input.issueKeys);
+      const selected = progressDestination(plan.input.issueKeys, transitions);
+      if (selected.error) return { status: 'INVALID', errors: [selected.error] };
+      ({ plan } = buildPreset(presetId, policy, issueKey, now, selected.destination));
+    } catch (e) {
+      return { status: 'INVALID', errors: [e.message] };
+    }
+  }
   const target = plan.simulation.mode === 'dry-run' ? service.withJira(jiraForSimulation(plan.simulation), graphForSimulation(plan.simulation)) : service;
   const origin = { source: 'simulated', simulation: plan.simulation };
   const result = await target.guardedChange(plan.kind, plan.input, actor, { origin });

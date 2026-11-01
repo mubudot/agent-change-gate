@@ -32,7 +32,7 @@ export function Summary({ data, pending }) {
       <Stat label="Waiting for approval">
         <Badge appearance={pending ? 'important' : 'default'} max={99}>{pending}</Badge>
       </Stat>
-      <Stat label="Agent writes today (site)">
+      <Stat label="Attempted targets today (site)">
         <Inline space="space.050" alignBlock="center">
           <Badge appearance="primary" max={9999}>{data.siteUsageToday}</Badge>
           <Text size="small">of {policy.siteDailyLimit}</Text>

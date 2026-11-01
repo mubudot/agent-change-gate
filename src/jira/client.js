@@ -49,7 +49,7 @@ export class JiraClient {
   async getTransitions(key) {
     const r = await this.request('GET', `/rest/api/3/issue/${issueRef(key)}/transitions`);
     ensureOk(r, `list transitions of ${key}`);
-    return (r.data.transitions ?? []).map((t) => ({ id: t.id, name: t.name, to: t.to?.name, toId: t.to?.id }));
+    return (r.data.transitions ?? []).map((t) => ({ id: t.id, name: t.name, to: t.to?.name, toId: t.to?.id, toCategory: t.to?.statusCategory?.key }));
   }
 
   async isJiraAdmin() {
