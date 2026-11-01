@@ -30,12 +30,12 @@ near-agent-spend-guard: per-agent policy, pending requests, audit). Here the "mo
 
 | Prize | How we qualify |
 |---|---|
-| Best Agents (Rovo) | `rovo:agent` + reusable `rovo:skill` + 10 `action` modules other agents can invoke |
-| Best app with Atlassian MCP | `rovo:mcp` declares the same 10 tools; MIT-licensed SKILL.md included for third-party agents (live exposure unverified) |
-| Teamwork Graph (stretch) | approval cards enriched with related work/owners from the Teamwork Graph API — not built yet |
+| Best Agents (Rovo) | `rovo:agent` + reusable `rovo:skill` + 11 `action` modules other agents can invoke |
+| Best app with Atlassian MCP | `rovo:mcp` declares the same 11 tools; MIT-licensed SKILL.md included for third-party agents (live exposure unverified) |
+| Teamwork Graph | the gate reads linked goals, pull requests and deployments (`src/context/`, read as the user) as risk signals |
 | Marketplace (stretch, user decision) | "submitted for listing" would qualify; needs a partner profile, privacy policy, support page |
 
-A submission can win only one bonus prize, so we select Agents + MCP and let judges place it.
+A submission can win only one bonus prize; we select **Best Agents** (the sponsor may move it).
 Category: **Apps for Software Teams** (dev-team triage/hygiene by agents).
 
 ## Policy gate (pure, `src/policy/`)
@@ -104,15 +104,18 @@ clock-hour boundaries. Jira configuration/project changes are not transactional 
 ## Module layout
 
 ```
-manifest.yml                 rovo:agent, rovo:skill, rovo:mcp, 10 actions, jira:globalPage
+manifest.yml                 rovo:agent, rovo:skill, rovo:mcp, 11 actions, jira:globalPage
 src/policy/                  pure core: policy.js (schema/defaults), ops.js (input → operation),
                              gate.js (verdict), approvals.js (state machine), fingerprint.js
 src/jira/client.js           Jira REST v3 calls (transport injected)
 src/jira/executor.js         resolve op against Jira + execute target by target
 src/store/                   memory.js (tests), kvs.js (Forge), repo.js (policy/usage/requests/audit)
 src/service.js               orchestration: guardedChange, runApproved, decide, dashboard, savePolicy
-src/simulation/              admin demo: presets.js (3 preset inputs), dry-run-jira.js (stand-in client),
-                             simulator.js (admin check, then GateService.guardedChange with source 'simulated')
+src/context/                 context signals: collector.js (Jira facts + Teamwork Graph), graph-client.js, signals.js
+src/simulation/              admin demo: presets.js (5 preset inputs), dry-run-jira.js / dry-run-graph.js (stand-ins),
+                             simulator.js (admin check, then GateService.guardedChange with source 'simulated'),
+                             destination.js (live preset destination), demo-session.js (Guided demo)
+src/store/prefix.js          per-user storage namespace for the Guided demo
 src/actions.js               Rovo action / MCP tool handlers (identity from context)
 src/resolvers.js             UI Kit resolvers
 src/index.js                 Forge wiring only (asUser transport, KVS, exports)
@@ -124,12 +127,22 @@ test/                        node:test unit + flow tests with fake Jira
 
 ## Simulated agent requests (works without Rovo)
 
-Admins can push three preset requests through `GateService.guardedChange`, the path the Rovo actions use. The only
+Admins can push five preset requests through `GateService.guardedChange`, the path the Rovo actions use. The only
 differences: requests and audit entries carry `source: 'simulated'`, and without an issue key the request is bound
 to `DryRunJira` (synthetic issues, no-op writes). The binding is stored on the request, and `run()` re-applies it
 whichever entry point runs the request, so a dry run can never write to Jira. Running a simulated request needs a
 Jira admin on every entry point. Simulated and agent requests use separate dedup keys and are never merged. Admin authority is checked with the real Jira client; `DryRunJira.isJiraAdmin()` is
 always false. The two-person rule, caps and approval expiry apply unchanged.
+
+## Guided demo (fresh install, no setup)
+
+`src/simulation/demo-session.js` runs five fixed steps (routine move → same move on an issue that ships in 3 days and
+is linked to a goal → approve → run once, replay refused → 21-issue bulk close denied) through a normal `GateService`
+whose store is a `PrefixStore` keyed by a hash of the caller's Forge account id. Policy, usage, requests, audit and the
+mutation lease all live under that prefix, so the installation's real data is untouched and the demo never takes the
+installation-wide lease. Jira and Teamwork Graph are the dry-run stand-ins seeded with `DEMO-1` / `DEMO-2`; the real
+Jira client is only asked whether the caller is a Jira admin. Demo keys carry a 24 h TTL and *Reset demo* deletes them.
+The resolvers accept only a step id.
 
 ## Demo script (video, < 3 min)
 
@@ -145,7 +158,8 @@ Without Rovo, steps 2–4 can be shown with the *Simulate an agent request* pane
 ## Next steps
 
 - Done: `forge register`, `forge deploy` (development) and `forge install` on a test site; UI Kit page renders.
-  Still open: run the Rovo agent / MCP tools from a Rovo chat and an MCP client; production deploy + sharing link for judges.
+  Done since: production deploy + sharing link; Rovo chat run for read tools and write planning (docs/ROVO_CHAT_RUN.md).
+  Still open: the Rovo Confirm → approve → run-from-chat round trip on video, an external MCP client run, and
+  redeploying production with the Guided demo.
 - Confluence guarded writes (needs multi-app compatibility config, Preview).
-- Teamwork Graph enrichment of approval cards (bonus stretch).
 - Notify approvers (Jira comment on the issue or email) when a request is queued.

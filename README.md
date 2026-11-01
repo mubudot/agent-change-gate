@@ -19,16 +19,42 @@ the "same command, different context" pair in the demo video (`SHIP-1` allowed a
 because its fix version ships within the week). The Rovo agent was run in a **real Rovo conversation** on a Forge demo
 site (Rovo's model picked the app's tools, which read live Jira and Teamwork Graph context; see
 [`docs/ROVO_CHAT_RUN.md`](docs/ROVO_CHAT_RUN.md)). The MCP server has not been run from an external MCP client: see
-[Rovo integration](#rovo-integration-and-what-was-verified).
-See `STATUS.md` for the review and the verification checklist.
+[Rovo integration](#rovo-integration-and-what-was-verified). Production v2.1.0 was built before the **Guided demo**
+and the Rovo hand-off buttons (*Ask Change Gate Agent*, *Run it from Rovo chat*); those are in the development build
+until production is redeployed. See `STATUS.md` for the review and the verification checklist.
 
 **Demo video (2:33):** VIDEO_URL_PLACEHOLDER (YouTube; link added when the video is published)
 
 **Install for judges:** [install Agent Change Gate on your Jira Cloud site](https://developer.atlassian.com/console/install/67a2afa4-d23d-4d5b-a9b7-1cf01c63defe?signature=AYABeMOYy2xGI9qOFPG1%2BVhSM6gAAAADAAdhd3Mta21zAEthcm46YXdzOmttczp1cy13ZXN0LTI6NzA5NTg3ODM1MjQzOmtleS83MDVlZDY3MC1mNTdjLTQxYjUtOWY5Yi1lM2YyZGNjMTQ2ZTcAuAECAQB4CxqLTo9l4lqXuFjNim1xJM%2Bp%2F3TVP9xHS2BrU5DRRucBFvKkfMY5YAWNYqJd8hgr6QAAAH4wfAYJKoZIhvcNAQcGoG8wbQIBADBoBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDJI50drpOZ9v9bcP7wIBEIA7NxXzVOZtJ97Xc86ozCnJZ0jhht3hQ6ltI205vzvhH3xgC2m%2FWatp1YrohFSMezy32gCyGAZq7WtgFtQAB2F3cy1rbXMAS2Fybjphd3M6a21zOmV1LXdlc3QtMTo3MDk1ODc4MzUyNDM6a2V5LzQ2MzBjZTZiLTAwYzMtNGRlMi04NzdiLTYyN2UyMDYwZTVjYwC4AQICAHi9bVMAkme4qVQX1fQHo6ePw3H40A7cGfz7yrmSfBWMXgGditovz04wvrAW6eo87HjoAAAAfjB8BgkqhkiG9w0BBwagbzBtAgEAMGgGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMpe9xflk2THfCH94aAgEQgDul26V%2BCSFHrVjcEaGfp9%2BlM5pkgYpAOtUTwYzE2nkjPhyQY9c7LTJSHD8U6%2FtohB5cQCecWp%2FIGrDkDgAHYXdzLWttcwBLYXJuOmF3czprbXM6dXMtZWFzdC0xOjcwOTU4NzgzNTI0MzprZXkvNmMxMjBiYTAtNGNkNS00OTg1LWI4MmUtNDBhMDQ5NTJjYzU3ALgBAgIAeDYASx0XCjkny4iLV6vz%2BKtEGSGT6kdt0QRpkn6D%2FlVEARLKhYeL0kJmRgzJY9zYmwMAAAB%2BMHwGCSqGSIb3DQEHBqBvMG0CAQAwaAYJKoZIhvcNAQcBMB4GCWCGSAFlAwQBLjARBAwq9n58xSBUNDYXIz8CARCAOx4DWJO0gIHc87DK6ykxOVmRLdEcOlJWUTrJAlBSd3Xq0kQOMqbAuCNbzfBK2Qu%2B8vaZLrmd0CUpbHRYAgAAAAAMAAAQAAAAAAAAAAAAAAAAADSCxVSkn2dDvIV2dK36H7L%2F%2F%2F%2F%2FAAAAAQAAAAAAAAAAAAAAAQAAADIPweEaJXk%2B4Sjej3OdKV3kB8%2FPFWQ0r8QJC7tP1V8EBfCvTdpG67tAk58h6kHGoi6W9DcXXkDuVbvc7sE3SjvwiNI%3D&product=jira)
 (Forge distribution link, production environment; an org admin must accept the scopes because Teamwork Graph scopes
-are organisation-wide. Then follow [Testing with and without Rovo](#testing-with-and-without-rovo).)
+are organisation-wide. Then follow [Try it in 5 minutes](#try-it-in-5-minutes-judges).)
 
-Built for Codegeist 2026 (Apps for Software Teams; bonus: Rovo Agents, Atlassian MCP, Teamwork Graph). See `DESIGN.md`.
+Built for Codegeist 2026: category **Apps for Software Teams**, bonus **Best Agents (Rovo)**. The app also ships a
+`rovo:mcp` server and reads Teamwork Graph. Submission text: [`docs/DEVPOST.md`](docs/DEVPOST.md). Design: `DESIGN.md`.
+
+## Try it in 5 minutes (judges)
+
+Open Jira → Apps → **Agent Change Gate** as a Jira admin (the person who installed the app is one).
+
+1. **No setup, no Rovo, no Jira writes: Guided demo.** Approvals tab → *Guided demo* card (a "New here?" banner points
+   to it on a fresh install). Click the five steps in order:
+   1. *Routine change*: move `DEMO-1` (no release, no links) to In Progress → **ALLOW**, runs at once.
+   2. *Same command, risky context*: the identical move on `DEMO-2`, whose fix version ships in 3 days and which is
+      linked to a company goal → **NEEDS APPROVAL** with `CONTEXT_RELEASE_SOON` and `CONTEXT_LINKED_GOAL`.
+   3. *Review as the approver*: see what an approver sees (count-only context) → **Approve**.
+   4. *Run the approved change once* → **EXECUTED** (dry run); *Try to run it again* → **REFUSED** (single-use).
+   5. *Runaway bulk close* of 21 issues → **DENY** (`TOO_MANY_TARGETS`) before any issue is read.
+
+   The card's *Demo audit trail* lists every step. The demo runs the real gate code (policy, context check, approval,
+   execution, caps, audit) on two sample issues in its own per-user storage, so your policy, caps, approvals and
+   audit log are not touched, and the two-person rule is off only inside the demo. *Reset demo* starts over; demo data
+   expires after 24 hours.
+2. **On your own issues.** Policy tab → add your project key to `allowedProjects` → **Save policy**. Testing alone?
+   Also set `"requireDistinctApprover": false` (set it back afterwards). Then use *Simulate an agent request* with an
+   issue key; [Testing with and without Rovo](#testing-with-and-without-rovo) shows how to reproduce the video's
+   release-context pair on your own site.
+3. **With Rovo** (Rovo-enabled sites only): Rovo chat → **Change Gate Agent** → *"What could go wrong if you move
+   KAN-2?"*, *"Move KAN-1 to In Progress"*, *"Close these 25 issues"*.
 
 ## Context-aware gating (Jira + Teamwork Graph)
 
@@ -63,39 +89,11 @@ resolves it, and each signal can only **raise** the verdict (policy `contextRisk
 - Tools: comment, transition, assign, edit (summary/priority/due date/labels), create, delete (approval only),
   run-approved-change, approval-status, my-activity, policy-summary, issue-context (read-only). The six change-request tools support `preview: true`;
   run-approved-change executes an approved request.
-- Jira global page **Agent Change Gate**: approvals, audit log, policy JSON editor, kill switch, and an admin-only
-  **Simulate an agent request** panel (see below).
+- Jira global page **Agent Change Gate**: approvals, audit log, policy JSON editor, kill switch, an admin-only
+  **Guided demo** (sample issues, isolated storage) and an admin-only **Simulate an agent request** panel (see below).
 - Forge KVS storage only, no external egress. Teamwork Graph scopes are read-only, per object type
   (`read:graph:issue:jira`, `read:graph:goal:atlassian`, `read:graph:pull-request:external`,
   `read:graph:deployment:external`).
-
-## Run the tests (no Atlassian account needed)
-
-```bash
-node --version   # tests require Node >= 22; the Forge CLI may require a newer patch
-npm ci
-node --test test/*.test.js        # 149 tests, no Atlassian account or network needed
-# optional: validate manifest.yml against the schema bundled with a local Forge CLI checkout
-# (npm i -g @forge/cli, then point FORGE_CLI_DIR at its install directory)
-FORGE_CLI_DIR=<path-to-@forge/cli> node scripts/validate-manifest.cjs
-```
-
-## Deploy (needs an Atlassian account; Rovo is optional, see below)
-
-```bash
-npm install
-export FORGE_EMAIL=... FORGE_API_TOKEN=...   # scoped API token, app "Forge"
-forge register            # writes the real app.id into manifest.yml
-forge lint
-forge deploy
-forge install --site <your-site>.atlassian.net --product jira
-```
-
-Then in Jira → Apps → **Agent Change Gate** → Policy, add your project key to `allowedProjects` (the default policy
-allows nothing). Open Rovo chat → pick **Change Gate Agent**.
-
-External MCP client: admin enables the app's tools in admin.atlassian.com → Apps → Sites → *site* → Connected apps,
-then add `https://mcp.atlassian.com/forge/<appId>` as a remote MCP server and use `skills/agent-change-gate/SKILL.md`.
 
 ## Testing with and without Rovo
 
@@ -191,6 +189,36 @@ Concurrent mutations return `REFUSED` / `BUSY`. Mutations take one installation-
 (`FAIL_IF_EXISTS` on a per-2-minute bucket key, plus a neighbour-bucket check) so parallel calls cannot race usage,
 human decisions, or policy updates. A crashed invocation blocks mutations for at most about two minutes.
 See `STATUS.md` for the operational limits of this approach.
+
+## For developers
+
+### Run the tests (no Atlassian account needed)
+
+```bash
+node --version   # tests require Node >= 22; the Forge CLI may require a newer patch
+npm ci
+node --test test/*.test.js        # 185 tests, no Atlassian account or network needed
+# optional: validate manifest.yml against the schema bundled with a local Forge CLI checkout
+# (npm i -g @forge/cli, then point FORGE_CLI_DIR at its install directory)
+FORGE_CLI_DIR=<path-to-@forge/cli> node scripts/validate-manifest.cjs
+```
+
+### Deploy (needs an Atlassian account; Rovo is optional, see above)
+
+```bash
+npm install
+export FORGE_EMAIL=... FORGE_API_TOKEN=...   # scoped API token, app "Forge"
+forge register            # writes the real app.id into manifest.yml
+forge lint
+forge deploy
+forge install --site <your-site>.atlassian.net --product jira
+```
+
+Then in Jira → Apps → **Agent Change Gate** → Policy, add your project key to `allowedProjects` (the default policy
+allows nothing). Open Rovo chat → pick **Change Gate Agent**.
+
+External MCP client: admin enables the app's tools in admin.atlassian.com → Apps → Sites → *site* → Connected apps,
+then add `https://mcp.atlassian.com/forge/<appId>` as a remote MCP server and use `skills/agent-change-gate/SKILL.md`.
 
 ## Built with
 

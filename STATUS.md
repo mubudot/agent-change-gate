@@ -6,7 +6,13 @@ audit log, kill switch, simulation panel) and the context-aware gate (Jira relea
 exercised there with live issues. Not submitted to Devpost or the Marketplace. The Rovo agent was run in a real Rovo
 conversation on a Forge demo site (development environment, see `docs/ROVO_CHAT_RUN.md`); the Rovo Confirm click, the
 approve-in-page → run-from-chat round trip and an external MCP client are not verified. Production is still v2.1.0:
-the Rovo hand-off changes of 2026-10-31 are in development only.
+the Rovo hand-off changes of 2026-10-31 and the Guided demo of 2026-11-01 are in development only.
+
+**2026-11-01 (judge onboarding):** admin-only **Guided demo** on the Approvals tab (five steps on sample issues, per-user
+storage namespace, no Jira writes, no setup) and a "New here?" banner on a fresh install; live comparison presets pick
+the issue's In Progress (or in-progress-category) transition instead of assuming the status name; dashboard labels
+"Attempted targets today (site)" and "Teamwork Graph API reachable". Tests 161 → 185. Deployed to development
+(GitHub Actions deploy run 41288358774, success). Not yet seen rendered in a browser.
 
 ## Review (2026-10-30)
 
@@ -51,7 +57,7 @@ They do not execute the Forge runtime or mount UI Kit; the Forge runtime was exe
   after termination/storage failure. Queue scans can grow with expired index entries; UI shows at most 50 active entries.
 - Jira-admin authority is checked at decision time as the invoking human. The app invalidates decisions when its
   approver configuration changes; it does not recheck a past approver's Jira-admin membership as another user at run time.
-- Submission still requires a public demo video, a public repository and the Devpost submission. The production
+- Submission still requires a public demo video and the Devpost submission (a public repository is optional under the rules). The production
   deploy and the judge installation link exist (setup steps in README). The manifest/skill support the intended
   Agents/MCP bonus entries; a Rovo chat run is verified for read tools and write planning (see `docs/ROVO_CHAT_RUN.md`),
   an external MCP client run is not. Teamwork Graph
