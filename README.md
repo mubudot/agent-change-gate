@@ -36,8 +36,9 @@ Built for Codegeist 2026: category **Apps for Software Teams**, bonus **Best Age
 
 Open Jira → Apps → **Agent Change Gate** as a Jira admin (site admins usually are; the demo and simulator are admin-only).
 
-1. **No setup, no Rovo, no Jira writes: Guided demo.** Approvals tab → *Guided demo* card (a "New here?" banner points
-   to it on a fresh install). Click the five steps in order:
+1. **No setup, no Rovo, no Jira writes: Guided demo.** Approvals tab → *Guided demo* card. On a fresh install it is
+   open at the top (a "New here?" banner points to it); once projects are allowed, the approval queue comes first and
+   **Try guided demo** opens it. Click the five steps in order:
    1. *Routine change*: move `DEMO-1` (no release, no links) to In Progress → **ALLOW**, runs at once.
    2. *Same command, risky context*: the identical move on `DEMO-2`, whose fix version ships in 3 days and which is
       linked to a company goal → **NEEDS APPROVAL** with `CONTEXT_RELEASE_SOON` and `CONTEXT_LINKED_GOAL`.
@@ -58,8 +59,8 @@ Open Jira → Apps → **Agent Change Gate** as a Jira admin (site admins usuall
    table. The Audit log tab shows *Simulated (dry run)* entries. Restore your policy afterwards; simulated requests
    count toward the caps.
 2. **On your own issues.** Policy tab → add your project key to `allowedProjects` → **Save policy**. Testing alone?
-   Also set `"requireDistinctApprover": false` (set it back afterwards). Then use *Simulate an agent request* with an
-   issue key; [Testing with and without Rovo](#testing-with-and-without-rovo) shows how to reproduce the video's
+   Also set `"requireDistinctApprover": false` (set it back afterwards). Then Approvals tab → **Test a request** opens
+   *Simulate an agent request*; enter an issue key; [Testing with and without Rovo](#testing-with-and-without-rovo) shows how to reproduce the video's
    release-context pair on your own site.
 3. **With Rovo** (Rovo-enabled sites only): Rovo chat → **Change Gate Agent** → *"What could go wrong if you move
    KAN-2?"*, *"Move KAN-1 to In Progress"*, *"Close these 25 issues"*.
@@ -124,7 +125,7 @@ put one issue (say `KAN-2`) in that version and leave another (`KAN-1`) without 
 `KAN-1` and click **Move to In Progress** (ALLOW, written to Jira), then enter `KAN-2` and click the same button
 (NEEDS APPROVAL, `CONTEXT_RELEASE_SOON`). With no key, the second context button shows the same contrast as a dry run.
 
-**Without Rovo — Simulate an agent request (Jira admins only):** Approvals tab → *Simulate an agent request*.
+**Without Rovo — Simulate an agent request (Jira admins only):** Approvals tab → **Test a request** (already open on a fresh install; older builds show the panel directly).
 Each preset is a raw action input, exactly what the Rovo agent would send, and it goes through the same
 `GateService.guardedChange` path: policy evaluation, caps, two-person approval, audit. Nothing is faked; the gate
 decides the verdict from the current policy.
@@ -205,7 +206,7 @@ See `STATUS.md` for the operational limits of this approach.
 ```bash
 node --version   # tests require Node >= 22; the Forge CLI may require a newer patch
 npm ci
-node --test test/*.test.js        # 200 tests, no Atlassian account or network needed
+node --test test/*.test.js        # 201 tests, no Atlassian account or network needed
 # optional: validate manifest.yml against the schema bundled with a local Forge CLI checkout
 # (npm i -g @forge/cli, then point FORGE_CLI_DIR at its install directory)
 FORGE_CLI_DIR=<path-to-@forge/cli> node scripts/validate-manifest.cjs

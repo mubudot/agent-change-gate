@@ -119,7 +119,7 @@ test('NEEDS APPROVAL banner is replaced once the simulated request is decided', 
 import { contextRulesSummary, graphStatusLabel, isContextReason, signalLabel, sourceAppearance, sourceNames } from '../src/frontend/format.js';
 import { normalizePolicy } from '../src/policy/policy.js';
 import { approvalReasonText } from '../src/frontend/format.js';
-import { DEMO_STEPS, demoResult, demoStepButton, showGuidedDemoHint } from '../src/frontend/demo-format.js';
+import { DEMO_STEPS, adminToolsExpanded, demoResult, demoStepButton, showGuidedDemoHint } from '../src/frontend/demo-format.js';
 
 test('guided demo display: only the next step is primary and enabled, results keep verdict and refusal codes', () => {
   assert.equal(DEMO_STEPS.length, 5);
@@ -164,4 +164,9 @@ test('context display helpers', () => {
   assert.equal(graphStatusLabel(policy, { ok: false }).text, 'Teamwork Graph API not reachable');
   assert.match(graphStatusLabel(policy, { ok: false, error: 'HTTP 401' }).detail, /HTTP 401/);
   assert.equal(graphStatusLabel(normalizePolicy({ contextRisk: { enabled: false } }).policy).text, 'Context checks off');
+});
+
+test('admin demo tools: expanded on a fresh install, on demand once the gate is configured', () => {
+  assert.equal(adminToolsExpanded({ isAdmin: true, policy: { allowedProjects: [] } }), true);
+  assert.equal(adminToolsExpanded({ isAdmin: true, policy: { allowedProjects: ['KAN'] } }), false);
 });

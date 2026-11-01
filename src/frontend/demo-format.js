@@ -9,6 +9,9 @@ export const DEMO_STEPS = [
 
 export const showGuidedDemoHint = (data) => Boolean(data?.isAdmin && data.policy?.allowedProjects?.length === 0);
 
+/** Fresh install: show the demo tools expanded. Configured gate: approval queue first, tools on demand. */
+export const adminToolsExpanded = (data) => showGuidedDemoHint(data);
+
 export function demoStepButton(demo, step, busy = false) {
   return { appearance: demo?.nextStep === step ? 'primary' : 'default', isDisabled: busy || demo?.nextStep !== step };
 }

@@ -23,8 +23,7 @@ import { invoke } from '@forge/bridge';
 import { approvalDetails } from '../approval-details.js';
 import { approvalReasonText, changeSummary, formatTime, operationLabel, relativeTime, sourceLabel, targetList } from '../format.js';
 import { EmptyNotice, Feedback, Section, StatusLozenge, resultMessage } from './ui.jsx';
-import { Simulator } from './Simulator.jsx';
-import { GuidedDemo } from './GuidedDemo.jsx';
+import { AdminTools } from './AdminTools.jsx';
 import { ContextSignals, SourceLozenge } from './ContextSignals.jsx';
 import { AskAgentButton } from './AskAgent.jsx';
 import { canRunFromChat, runApprovedPrompt } from '../rovo-prompts.js';
@@ -186,8 +185,7 @@ export function Approvals({ data, loading, reload }) {
 
   return (
     <Section>
-      {data.isAdmin && <GuidedDemo />}
-      {data.isAdmin && <Simulator data={data} reload={reload} />}
+      {data.isAdmin && <AdminTools data={data} reload={reload} />}
       <Feedback message={message} />
       {!data.isApprover && (
         <SectionMessage appearance="information">

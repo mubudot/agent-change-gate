@@ -23,7 +23,7 @@ ships in this week's release is not, and the agent cannot tell the difference.
 ## What it does
 
 Agent Change Gate gives Rovo agents and MCP clients Jira write tools that pass through a deterministic policy gate.
-Before a change runs, the gate reads what each issue is connected to and decides:
+For transitions, edits, assignments and deletions, the gate reads what each issue is connected to before deciding:
 
 - **ALLOW**: routine change, runs immediately.
 - **NEEDS APPROVAL**: the issue's context says it matters (fix version due within 7 days, blocks open work, highest
@@ -41,13 +41,14 @@ context signals need a human, and can pause all agent writes with one click.
 
 1. Install with the installation link (an organisation admin accepts the scopes; Teamwork Graph read scopes are
    organisation-wide). Open Jira → Apps → **Agent Change Gate** as a Jira admin.
-2. **No setup, no Rovo, no Jira writes:** on the Approvals tab, run the **Guided demo**: routine change (allowed) →
+2. **No setup, no Rovo, no Jira writes:** on the Approvals tab, run the **Guided demo** (open at the top on a fresh
+   install; **Try guided demo** once projects are allowed): routine change (allowed) →
    the same command on an issue that ships in 3 days (needs approval, with the reasons) → approve as the reviewer →
    run it once → try to run it again (refused, single-use) → runaway bulk close (denied). Its audit trail shows
    every step. The demo uses sample issues and its own storage, so your real policy, caps and audit log are untouched.
 3. **On real issues:** Policy tab → add your project key to `allowedProjects` and save. To approve your own requests
    when testing alone, set `requireDistinctApprover` to `false` (set it back afterwards). Then use
-   **Simulate an agent request** with an issue key, or the Rovo agent.
+   **Test a request** (the request simulator) with an issue key, or the Rovo agent.
 4. **With Rovo** (Rovo-enabled sites only): Rovo chat → **Change Gate Agent** → "What could go wrong if you move
    KAN-2?", "Move KAN-1 to In Progress", "Close these 25 issues".
 
@@ -64,7 +65,7 @@ Full steps, including how to reproduce the release-context pair on your own issu
   deployments. Approvers see count-only context; names stay with the user whose permissions read them.
 - Policy engine is pure and deterministic (no LLM in the decision). Concurrency-safe usage reservation with a
   `FAIL_IF_EXISTS` storage lease; an approval is bound to the exact resolved operation and rechecked against the current policy before it runs.
-- 200 `node:test` tests (no Atlassian account needed); independent code reviews until no material issues were left.
+- 201 `node:test` tests (no Atlassian account needed); independent code reviews until no material issues were left.
 
 ## How it meets the technology requirement
 
